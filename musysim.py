@@ -9,7 +9,7 @@ import sys
 
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
-
+ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 def mrand():
     """
@@ -27,15 +27,18 @@ def max_signed(i):
 
 
 class Compiler():
-    main_program = ''
-    macros = {}
-    variables = {}
     lines = {}
+    macros = {}
+    paragraphs = {}
+    variables = {}
     pointer = 0
 
-    def __init__(self, source):
+    def __init__(self, source, input_=None):
         self.main_program, macros = re.split(r'\$', source.strip())
+        self.store_input(input_)
+        self.paragraph = None
         self.EXP = 0  # The expression register
+        self.bus = 1  # Current output bus (1-6)
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
@@ -56,6 +59,22 @@ class Compiler():
         if DEBUG:
             print("  BLOCKS: %s" % blocks)
         return blocks
+
+    def store_input(self, input_):
+        if not input_:
+            return
+        re_parens = re.compile(r'[\(\)\[\]]')
+        re_delims = re.compile(r'[,;\s]+')
+        i = 0
+        for line in input_.split('\n'):
+            if not self.paragraphs:
+                self.paragraphs[ALPHA[i]] = []
+            line = re_parens.sub('', line.strip())
+            if line == '':
+                i += 1
+                self.paragraphs[ALPHA[i]] = []
+                continue
+            self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
 
     def get_val(self, symbol):
         if not symbol:
@@ -174,15 +193,21 @@ class Macro():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="MUSYS (1973) simulator.")
-    parser.add_argument('-d', '--debug', help='turn on debug output', action='store_true')
     parser.add_argument('file', help='MUSYS source file to process')
+    parser.add_argument('-d', '--debug', help='turn on debug output', action='store_true')
+    parser.add_argument('-i', '--input', help='input file; paragraphs (A-Z) of numerical data')
     args = parser.parse_args()
 
     DEBUG = args.debug
     source = args.file
+    input_ = args.input
+
+    if input_:
+        with open(input_) as data:
+            input_ = data.read()
 
     with open(source, 'r') as f:
-        musys = Compiler(f.read())
+        musys = Compiler(f.read(), input_)
         if DEBUG:
             print(musys)
         musys.run()

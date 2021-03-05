@@ -28,3 +28,12 @@ def test_max_value():
     m.run()
     assert m.EXP < 2048
     assert m.EXP == -4
+
+
+def test_strict_left_right_eval():
+    code = "10-5*4 $"
+    # This is _supposed_ to be 20.
+    # i.e. (10-5)*4
+    m = Compiler(code)
+    m.run()
+    assert m.EXP == 20  # Not -10!

@@ -7,7 +7,6 @@ import argparse
 import re
 import sys
 
-EXP = 0  # Expression Buffer
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 
@@ -28,8 +27,9 @@ class Parser():
     lines = {}
     pointer = 0
 
-    def __init__(self, f):
-        self.main_program, macros = re.split(r'\$', f.read().strip())
+    def __init__(self, source):
+        self.main_program, macros = re.split(r'\$', source.strip())
+        self.EXP = 0  # The expression register
         self.macros = [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
@@ -69,15 +69,14 @@ class Parser():
         self.pointer = self.lines[lineno]
 
     def expr_evaluate(self, expression):
-        global EXP
         operators = {
-                '+': lambda x: EXP + x,
-                '-': lambda x: EXP - x,
-                '*': lambda x: EXP * x,
-                '/': lambda x: EXP // x,
-                '&': lambda x: EXP & x & MAX,
-                '>': lambda x: max(EXP, x),
-                '<': lambda x: min(EXP, x),
+                '+': lambda e, x: e + x,
+                '-': lambda e, x: e - x,
+                '*': lambda e, x: e * x,
+                '/': lambda e, x: e // x,
+                '&': lambda e, x: e & x & MAX,
+                '>': lambda e, x: max(e, x),
+                '<': lambda e, x: min(e, x),
         }
         parts = [p for p in re.split(r'(\W)', expression) if p]
         op = None
@@ -85,12 +84,12 @@ class Parser():
             if p in operators.keys():
                 op = operators[p]
             elif p in '↑^':
-                EXP = mrand(EXP)
+                self.EXP = mrand(self.EXP)
             elif op is None:
-                EXP = self.get_val(p)
+                self.EXP = self.get_val(p)
             else:
-                EXP = op(self.get_val(p)) & MAX
-        return EXP
+                self.EXP = op(self.EXP, self.get_val(p)) & MAX
+        return self.EXP
 
     def evaluate(self, routine):
         """
@@ -118,7 +117,7 @@ class Parser():
         elif output_match:
             val = self.get_val(output_match.group(1))
             if val > 0:
-                print(output_match.group(2).replace('\\', str(EXP)))
+                print(output_match.group(2).replace('\\', str(self.EXP)))
         elif '=' in routine:  # assignment
             var, val = routine.split('=')
             self.assign(var, val)
@@ -159,7 +158,7 @@ if __name__ == '__main__':
     source = args.file
 
     with open(source, 'r') as f:
-        musys = Parser(f)
+        musys = Parser(f.read())
         if DEBUG:
             print(musys)
         musys.run()

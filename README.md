@@ -6,7 +6,8 @@ More information and links to primary sources are available at https://esolangs.
 
 This is an attempt to create a MUSYS simulator to produce text and audio output from MUSYS source code in a way as close as possible to the original EMS software and hardware.
 
-The most detailed source of technical information is the article "MUSYS: Software for an Electronic Music Studio" by Peter Grogono, in _Software — Practice and Experience, 3_, 1973. pp.369-383.
+The most detailed source of technical information is the article "MUSYS: Software for an Electronic Music Studio" by Peter Grogono, in _Software — Practice and Experience, 3_, 1973. pp.369-383. [doi:10.1002/spe.4380030410](https://doi.org/10.1002/spe.4380030410)
+
 Additionally [Peter Grogono's blog](http://users.encs.concordia.ca/~grogono/Bio/ems.html) provides good context and history.
 
 The related non-audio language [Mouse](https://esolangs.org/wiki/Mouse) has a relatively 'active' and enthusiastic hobbyist community and new code and interpreters exist for it. I am not aware of any other attempts to resurrect MUSYS.

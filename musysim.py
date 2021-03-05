@@ -20,6 +20,12 @@ def mrand():
     pass
 
 
+def max_signed(i):
+    """Return i as a singed MAX integer."""
+    signbit = i & ((MAX + 1) // 2)
+    return -(i - signbit) if signbit else i
+
+
 class Parser():
     main_program = ''
     macros = []
@@ -88,7 +94,8 @@ class Parser():
             elif op is None:
                 self.EXP = self.get_val(p)
             else:
-                self.EXP = op(self.EXP, self.get_val(p)) & MAX
+                self.EXP = op(self.EXP, self.get_val(p))
+        self.EXP = max_signed(self.EXP)
         return self.EXP
 
     def evaluate(self, routine):

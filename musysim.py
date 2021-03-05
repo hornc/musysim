@@ -12,6 +12,15 @@ MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 
 
+def mrand():
+    """
+    a random number R
+    such that 1 <= R <= EXP
+    or EXP <= R <= 1 if EXP < O
+    """
+    pass
+
+
 class Parser():
     main_program = ''
     macros = []
@@ -61,7 +70,6 @@ class Parser():
 
     def expr_evaluate(self, expression):
         global EXP
-        EXP = 0
         operators = {
                 '+': lambda x: EXP + x,
                 '-': lambda x: EXP - x,
@@ -90,8 +98,8 @@ class Parser():
         """
         self.pointer += 1
         repeat_match = re.match(r'(.+)\((.)\)', routine)
-        output_match = re.match(r'(.+)"(.*)"', routine)
-        conditional_match = re.match(r'(.+)\[(.)\]', routine)
+        output_match = re.match(r'(.+)("(.*)"|\\)', routine)
+        #conditional_match = re.match(r'(.+)\[(.)\]', routine)
         if '[' in routine:  # conditional
             expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
             if DEBUG:
@@ -117,6 +125,8 @@ class Parser():
         elif routine[0] == 'G':  # GOTO
             lineno = int(re.match('G([0-9]+)', routine).group(1))
             self.goto(lineno)
+        else:  # simply evaluate the line
+            self.expr_evaluate(routine)
 
     def run(self):
         """ Run the program!"""

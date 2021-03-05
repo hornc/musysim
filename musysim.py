@@ -124,7 +124,7 @@ class Parser():
         elif output_match:
             val = self.get_val(output_match.group(1))
             if val > 0:
-                print(output_match.group(2).replace('\\', str(self.EXP)))
+                print(output_match.group(2).strip('"').replace('\\', str(self.EXP)))
         elif '=' in routine:  # assignment
             var, val = routine.split('=')
             self.assign(var, val)

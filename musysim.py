@@ -28,7 +28,7 @@ def max_signed(i):
 
 class Compiler():
     main_program = ''
-    macros = []
+    macros = {}
     variables = {}
     lines = {}
     pointer = 0
@@ -36,7 +36,7 @@ class Compiler():
     def __init__(self, source):
         self.main_program, macros = re.split(r'\$', source.strip())
         self.EXP = 0  # The expression register
-        self.macros = [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]
+        self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
         # extract any line numbers
@@ -47,11 +47,11 @@ class Compiler():
                 self.main_program[i] = lineno.group(2)
 
     def __repr__(self):
-        return """==MUSYS program==\n%s\n==Lines==\n%s\n==Macros==\n%s""" % (self.main_program, self.lines, '\n'.join([str(m) for m in self.macros]))
+        return """==MUSYS program==\n%s\n==Lines==\n%s\n==Macros==\n%s""" % (self.main_program, self.lines, '\n'.join([str(v) for m, v in self.macros.items()]))
 
     def split_into_blocks(self, routine):
         """Split a string of code into blocks."""
-        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)')
+        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)|(#[^;]+;)')
         blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
         if DEBUG:
             print("  BLOCKS: %s" % blocks)
@@ -101,11 +101,12 @@ class Compiler():
         self.EXP = max_signed(self.EXP)
         return self.EXP
 
-    def evaluate(self, routine):
+    def evaluate(self, routine, increment=True):
         """
         Evaluates routine.
         """
-        self.pointer += 1
+        if increment:
+            self.pointer += 1
         repeat_match = re.match(r'(.+)\((.)\)', routine)
         output_match = re.match(r'([^"]+)?("(.*)"|\\)', routine)
         #conditional_match = re.match(r'(.+)\[(.)\]', routine)
@@ -118,8 +119,7 @@ class Compiler():
                 for s in self.split_into_blocks(subroutine):
                     if DEBUG:
                         print(">>>" + s)
-                    self.pointer -= 1
-                    self.evaluate(s)
+                    self.evaluate(s, False)
         elif repeat_match:
             expr, routine = repeat_match.groups()
             for i in range(expr):
@@ -137,8 +137,17 @@ class Compiler():
         elif routine[0] == 'G':  # GOTO
             lineno = int(re.match('G([0-9]+)', routine).group(1))
             self.goto(lineno)
+        elif '#' in routine:
+            # TODO: Macro calls can apparently be nested
+            self.evaluate(self.call_macro(routine), False)
         else:  # simply evaluate the line
             self.expr_evaluate(routine)
+
+    def call_macro(self, routine):
+        re_macro = re.compile(r'#([A-Z]+)\s+(.*);')
+        name, parameters = re_macro.match(routine).groups()
+        values = [self.expr_evaluate(p) for p in parameters.split(',')]
+        return self.macros[name].call(values)
 
     def run(self):
         """ Run the program!"""
@@ -147,15 +156,17 @@ class Compiler():
 
 
 class Macro():
-    name = ''
-    body = ''
     def __init__(self, raw):
         data = [t.strip() for t in re.split('(^[A-Z]{2,6})', raw.strip()) if t]
-        self.name = data[0]
-        self.body = data[1]
+        self.name, self.body = data
+        assert len(self.name) < 7
 
-    def invoke(self, args):
-        pass
+    def call(self, args):
+        result = self.body
+        for i, a in enumerate(args):
+            result = result.replace('%' + chr(65 + i), str(a))
+        #print('Called %s with %s. BODY = %s RESULT = %s' % (self.name, args, self.body, result))
+        return result
 
     def __repr__(self):
         return "Macro <%s>: %s" % (self.name, self.body)

@@ -10,6 +10,8 @@ import sys
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+RE_DEVICE = re.compile(r'[A-Z][0-9]+')
+
 
 def mrand():
     """
@@ -27,6 +29,7 @@ def max_signed(i):
 
 
 class Compiler():
+    busses = []
     lines = {}
     macros = {}
     paragraphs = {}
@@ -39,6 +42,8 @@ class Compiler():
         self.paragraph = None
         self.EXP = 0  # The expression register
         self.bus = 1  # Current output bus (1-6)
+        for i in range(1, 6):
+            self.busses.append(Bus(i))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
@@ -124,10 +129,12 @@ class Compiler():
         """
         Evaluates routine.
         """
+        routine = routine.strip()
         if increment:
             self.pointer += 1
         repeat_match = re.match(r'(.+)\((.)\)', routine)
         output_match = re.match(r'([^"]+)?("(.*)"|\\)', routine)
+        send_match = re.match(r'([^\s\.:]+)(\.|:)(.*)$', routine)
         #conditional_match = re.match(r'(.+)\[(.)\]', routine)
         if '[' in routine:  # conditional
             expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
@@ -139,6 +146,14 @@ class Compiler():
                     if DEBUG:
                         print(">>>" + s)
                     self.evaluate(s, False)
+        elif send_match:
+            #print('DEVICE:', send_match.groups())
+            v, w, remainder = send_match.groups()
+            if not RE_DEVICE.match(v):
+                v = self.get_val(v)
+            self.output(v, w)
+            if remainder:
+                self.evaluate(remainder, False)
         elif repeat_match:
             expr, routine = repeat_match.groups()
             for i in range(expr):
@@ -150,6 +165,9 @@ class Compiler():
                 print(output.replace('\\', str(self.EXP)))
             elif val > 0:
                 print(output)
+        elif '!' in routine:  # select output bus
+            n = re.search(r'([0-9])!', routine).group(1)
+            self.bus = int(n)
         elif '=' in routine:  # assignment
             var, val = re.split(r'(\w)+\s*=\s*', routine)[-2:]
             self.assign(var, val)
@@ -168,6 +186,26 @@ class Compiler():
         values = [self.expr_evaluate(p) for p in parameters.split(',')]
         return self.macros[name].call(values)
 
+    def output(self, value, width):
+        """Send an output to current bus."""
+        if isinstance(value, str):
+            v = self.lookup(value)
+        else:
+            v = value
+        v = oct(int(v))[-2:].replace('o', '0')
+        self.busses[self.bus - 1].send(v)
+
+    def lookup(self, value):
+        #TODO: have a full device lookup list
+        devices = {
+                'O1': 1, 'O2': 2, 'O3': 3,
+                'L1': 12, 'L2': 13, 'L3': 14,
+                'A1': 18, 'A2': 19,
+                'E1': 24,
+                'T1': 60, 'T2': 61, 'T3': 62,
+                }
+        return devices[value]
+
     def run(self):
         """ Run the program!"""
         while self.pointer < len(self.main_program):
@@ -184,11 +222,29 @@ class Macro():
         result = self.body
         for i, a in enumerate(args):
             result = result.replace('%' + chr(65 + i), str(a))
-        #print('Called %s with %s. BODY = %s RESULT = %s' % (self.name, args, self.body, result))
+        #print('Called %s with %s. RESULT = %s' % (self.name, args, result))
         return result
 
     def __repr__(self):
         return "Macro <%s>: %s" % (self.name, self.body)
+
+
+class Bus():
+    def __init__(self, n):
+        self.n = n
+        self.data = []  # a list of octal numbers
+        self.buffer = ''
+
+    def send(self, n):
+        """n is 2 or 4 digit octal string"""
+        #print('DEBUG BUS', n)
+        if self.buffer:
+            self.data.append(self.buffer + n)
+            self.buffer = ''
+        elif len(n) == 2:
+            self.buffer = n
+        else:
+            self.data.append(n)
 
 
 if __name__ == '__main__':
@@ -208,7 +264,9 @@ if __name__ == '__main__':
 
     with open(source, 'r') as f:
         musys = Compiler(f.read(), input_)
-        if DEBUG:
-            print(musys)
-        musys.run()
+
+    if DEBUG:
+        print(musys)
+    musys.run()
+    print(musys.busses[0].data)
 

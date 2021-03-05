@@ -26,7 +26,7 @@ def max_signed(i):
     return -(i - signbit) if signbit else i
 
 
-class Parser():
+class Compiler():
     main_program = ''
     macros = []
     variables = {}
@@ -171,7 +171,7 @@ if __name__ == '__main__':
     source = args.file
 
     with open(source, 'r') as f:
-        musys = Parser(f.read())
+        musys = Compiler(f.read())
         if DEBUG:
             print(musys)
         musys.run()

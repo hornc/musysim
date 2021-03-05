@@ -1,13 +1,13 @@
 import pytest
-from musysim import Parser
+from musysim import Compiler
 
 
 def test_register_addition():
     code = "10+5 $"
-    p = Parser(code)
-    assert p.EXP == 0
-    p.run()
-    assert p.EXP == 15
+    m = Compiler(code)
+    assert m.EXP == 0
+    m.run()
+    assert m.EXP == 15
 
 
 def test_extra_23bit_precision():
@@ -17,14 +17,14 @@ def test_extra_23bit_precision():
     Example given:  100*200/10 should equal 2000
     """
     code = "100*200/10$"
-    p = Parser(code)
-    p.run()
-    assert p.EXP == 2000
+    m = Compiler(code)
+    m.run()
+    assert m.EXP == 2000
 
 
 def test_max_value():
     code = "2047+5 $"
-    p = Parser(code)
-    p.run()
-    assert p.EXP < 2048
-    assert p.EXP == -4
+    m = Compiler(code)
+    m.run()
+    assert m.EXP < 2048
+    assert m.EXP == -4

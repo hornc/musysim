@@ -51,12 +51,15 @@ class Parser():
 
     def split_into_blocks(self, routine):
         """Split a string of code into blocks."""
-        blocks = [t.strip() for t in re.split(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")', routine) if t and t.strip()]
+        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)')
+        blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
         if DEBUG:
             print("  BLOCKS: %s" % blocks)
         return blocks
 
     def get_val(self, symbol):
+        if not symbol:
+            return 0
         try:
             return int(symbol)
         except ValueError as e:
@@ -100,11 +103,11 @@ class Parser():
 
     def evaluate(self, routine):
         """
-        Evaluates routine
+        Evaluates routine.
         """
         self.pointer += 1
         repeat_match = re.match(r'(.+)\((.)\)', routine)
-        output_match = re.match(r'(.+)("(.*)"|\\)', routine)
+        output_match = re.match(r'([^"]+)?("(.*)"|\\)', routine)
         #conditional_match = re.match(r'(.+)\[(.)\]', routine)
         if '[' in routine:  # conditional
             expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
@@ -121,10 +124,13 @@ class Parser():
             expr, routine = repeat_match.groups()
             for i in range(expr):
                 self.evaluate(routine)
-        elif output_match:
+        elif output_match:  # STDOUT for monitor and debug
             val = self.get_val(output_match.group(1))
-            if val > 0:
-                print(output_match.group(2).strip('"').replace('\\', str(self.EXP)))
+            output = output_match.group(2).strip('"')
+            if output == '\\':
+                print(output.replace('\\', str(self.EXP)))
+            elif val > 0:
+                print(output)
         elif '=' in routine:  # assignment
             var, val = routine.split('=')
             self.assign(var, val)

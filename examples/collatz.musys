@@ -2,7 +2,7 @@
 1"SALPYNX 2019."
 A=25
 1""
-A+0"STARTING WITH \:"
+A+0"STARTING WITH:" \
 1""
-10 A-1[A&1[A=A*3+1*2] A=A/2 1"\" G10]
+10 A-1[A&1[A=A*3+1*2] A=A/2 \ G10]
 $

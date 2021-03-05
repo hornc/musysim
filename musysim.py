@@ -7,8 +7,8 @@ import argparse
 import re
 import sys
 
-EXP = 0
-MAX = 0xfff
+EXP = 0  # Expression Buffer
+MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 
 class Parser():

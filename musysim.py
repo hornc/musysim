@@ -151,7 +151,7 @@ class Compiler():
             elif val > 0:
                 print(output)
         elif '=' in routine:  # assignment
-            var, val = routine.split('=')
+            var, val = re.split(r'(\w)+\s*=\s*', routine)[-2:]
             self.assign(var, val)
         elif routine[0] == 'G':  # GOTO
             lineno = int(re.match('G([0-9]+)', routine).group(1))

@@ -11,20 +11,22 @@ EXP = 0  # Expression Buffer
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 
+
 class Parser():
     main_program = ''
     macros = []
     variables = {}
     lines = {}
     pointer = 0
+
     def __init__(self, f):
-        self.main_program, macros = re.split('\$', f.read().strip())
-        self.macros = [Macro(m) for m in re.split('\s*@\s+|@$', macros) if m]
+        self.main_program, macros = re.split(r'\$', f.read().strip())
+        self.macros = [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
         # extract any line numbers
-        for i,block in enumerate(self.main_program):
-            lineno = re.match('^([0-9]+)\s(.*)$', block)
+        for i, block in enumerate(self.main_program):
+            lineno = re.match(r'^([0-9]+)\s(.*)$', block)
             if lineno:
                 self.lines[int(lineno.group(1))] = i
                 self.main_program[i] = lineno.group(2)
@@ -34,7 +36,7 @@ class Parser():
 
     def split_into_blocks(self, routine):
         """Split a string of code into blocks."""
-        blocks = [t.strip() for t in re.split('(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")', routine) if t and t.strip()]
+        blocks = [t.strip() for t in re.split(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")', routine) if t and t.strip()]
         if DEBUG:
             print("  BLOCKS: %s" % blocks)
         return blocks
@@ -69,7 +71,7 @@ class Parser():
                 '>': lambda x: max(EXP, x),
                 '<': lambda x: min(EXP, x),
         }
-        parts = [p for p in re.split('(\W)', expression) if p]
+        parts = [p for p in re.split(r'(\W)', expression) if p]
         op = None
         for p in parts:
             if p in operators.keys():
@@ -87,11 +89,11 @@ class Parser():
         Evaluates routine
         """
         self.pointer += 1
-        repeat_match = re.match('(.+)\((.)\)', routine)
-        output_match = re.match('(.+)"(.*)"', routine)
-        conditional_match = re.match('(.+)\[(.)\]', routine)
+        repeat_match = re.match(r'(.+)\((.)\)', routine)
+        output_match = re.match(r'(.+)"(.*)"', routine)
+        conditional_match = re.match(r'(.+)\[(.)\]', routine)
         if '[' in routine:  # conditional
-            expr, subroutine = re.match('([^\[]*)\[(.*)\]', routine).groups()
+            expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
             if DEBUG:
                 print("  COND %s (%s) => %s" % (expr, self.get_val(expr) > 0, subroutine))
                 #print("  REPEAT MATCH: %s" % repeat_match)

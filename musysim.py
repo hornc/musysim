@@ -7,6 +7,8 @@ import argparse
 import re
 import sys
 
+from devices import devices
+
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -42,8 +44,9 @@ class Compiler():
         self.paragraph = None
         self.EXP = 0  # The expression register
         self.bus = 1  # Current output bus (1-6)
-        for i in range(1, 6):
-            self.busses.append(Bus(i))
+        self.outfile = 'musys.out'
+        for i in range(6):
+            self.busses.append(Bus(i + 1))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
@@ -92,9 +95,10 @@ class Compiler():
             return self.variables.get(symbol, 0)
 
     def assign(self, var, value):
+        v = self.get_val(value)
         if DEBUG:
-            print('  ASSIGN "%s" = (%s) TO %s' % (value, self.get_val(value), var))
-        self.variables[var] = self.get_val(value)
+            print('  ASSIGN "%s" = (%s) TO %s' % (value, v, var))
+        self.variables[var] = v
 
     def goto(self, lineno):
         if DEBUG:
@@ -156,7 +160,7 @@ class Compiler():
                 self.evaluate(remainder, False)
         elif repeat_match:
             expr, routine = repeat_match.groups()
-            for i in range(expr):
+            for i in range(self.get_val(expr)):
                 self.evaluate(routine)
         elif output_match:  # STDOUT for monitor and debug
             val = self.get_val(output_match.group(1))
@@ -189,22 +193,22 @@ class Compiler():
     def output(self, value, width):
         """Send an output to current bus."""
         if isinstance(value, str):
-            v = self.lookup(value)
+            v = devices[value]
         else:
             v = value
         v = oct(int(v))[-2:].replace('o', '0')
         self.busses[self.bus - 1].send(v)
 
-    def lookup(self, value):
-        #TODO: have a full device lookup list
-        devices = {
-                'O1': 1, 'O2': 2, 'O3': 3,
-                'L1': 12, 'L2': 13, 'L3': 14,
-                'A1': 18, 'A2': 19,
-                'E1': 24,
-                'T1': 60, 'T2': 61, 'T3': 62,
-                }
-        return devices[value]
+    def write(self):
+        """
+        Writes all busses / lists to file.
+        """
+        #TODO: allow a range of data formats
+        print('[Writing all data lists to %s...]' % self.outfile)
+        with open(self.outfile, 'w') as f:
+            for b in self.busses:
+                f.write(' '.join(b.data))
+                f.write('\n')
 
     def run(self):
         """ Run the program!"""
@@ -222,7 +226,7 @@ class Macro():
         result = self.body
         for i, a in enumerate(args):
             result = result.replace('%' + chr(65 + i), str(a))
-        #print('Called %s with %s. RESULT = %s' % (self.name, args, result))
+        print('Called %s with %s. RESULT = %s' % (self.name, args, result))
         return result
 
     def __repr__(self):
@@ -269,4 +273,5 @@ if __name__ == '__main__':
         print(musys)
     musys.run()
     print(musys.busses[0].data)
+    musys.write()
 

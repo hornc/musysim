@@ -105,3 +105,10 @@ full_devices = {
 
 
 devices = {k: v['number'] for k, v in full_devices.items()}
+
+
+def get_device(n):
+    # TODO: something efficient...
+    for k, v in full_devices.items():
+        if v['number'] == n:
+            return v

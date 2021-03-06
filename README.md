@@ -33,4 +33,23 @@ converts (roughly) to Nyquist:
   
 Using my guess of `{Nyquist (MIDI) tone} = {MUSYS tone} + 28`
 
-MUSYS tones range from 0-63. 0 is oscillator off. 32 would be middle C. The scale is apparently 8 octave chromatic, which leaves the highest and lowest notes unreachable. It sounds like there may have been a way to 'tune' an oscillator to reach these though.  
+MUSYS tones range from 0-63. 0 is oscillator off. 32 would be middle C. The scale is apparently 8 octave chromatic, which leaves the highest and lowest notes unreachable. It sounds like there may have been a way to 'tune' an oscillator to reach these though.
+
+### Example Usage:
+
+    ./musysim.py examples/note.musys; ./sofkasim.py
+
+    Called NOTE with [56, 12, 15]. RESULT = O1.56. A1.12. E1.12/2+7. T1.15-1. E1.12/2+2<7. T1.1. T=T+15
+    ['0170', '1414', '3015', '7416', '3007', '7401']
+    [Writing all data lists to musys.out...]
+    (play (mult (seq (osc 84 0.15000000000000002)) (seq (env 0.14 0 0.01 13 7 7))))
+
+And with [Nyquist](https://www.cs.cmu.edu/~music/nyquist/) installed (`sudo apt-get install nyquist` will work under Ubuntu)
+
+    ./musysim.py examples/note.musys; ./sofkasim.py | ny
+
+Should play a shaped note though your sound device lasting for 0.15 seconds.
+
+Currently the code is in a very basic proof-of-concept state, and only the simplest examples work error free.
+The plan is to add more complex scores and explore what this language can do and expand the tools accordingly.
+

@@ -101,7 +101,7 @@ class Oscillator:
 
     def change(self, pitch):
         self.history.append(self.out(False))
-        self.pitch = pitch
+        self.pitch = pitch + 28
         self.duration = 0
 
     def out(self, history=True):

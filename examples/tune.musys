@@ -7,5 +7,6 @@ $
 NOTE O1.%A. A1.%B. E1.%B/2+7. T1.%C-1.
      E1.%B/2+2<7. T1.1 T=T+%C @
 
-TUNE N=2 Y%A(#NOTE %(N),12,4;N=N+1) @
+TUNE N=2 
+%A(#NOTE %(N),12,4; N=N+1) @
 

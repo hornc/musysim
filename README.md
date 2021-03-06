@@ -16,8 +16,8 @@ The related non-audio language [Mouse](https://esolangs.org/wiki/Mouse) has a re
 
 1. Basic parser, operations and flow control - **DONE**
 2. Output to STDOUT - **DONE**
-3. Test and fix bugs
-4. Output compiled device/data pairs for audio (binary / other format?)
+3. Test and fix bugs - **ONGOING**
+4. Output compiled device/data pairs for audio (binary / other format?) **DONE**
 5. Converter that takes device instruction output and produces [Nyquist](https://www.cs.cmu.edu/~music/nyquist/) code to synthesise audio
 
 

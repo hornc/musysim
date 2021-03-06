@@ -31,7 +31,7 @@ def max_signed(i):
 
 
 class Compiler():
-    busses = []
+    buses = []
     lines = {}
     macros = {}
     paragraphs = {}
@@ -46,7 +46,7 @@ class Compiler():
         self.bus = 1  # Current output bus (1-6)
         self.outfile = 'musys.out'
         for i in range(6):
-            self.busses.append(Bus(i + 1))
+            self.buses.append(Bus(i + 1))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
         # break program into blocks
         self.main_program = self.split_into_blocks(self.main_program)
@@ -197,16 +197,16 @@ class Compiler():
         else:
             v = value
         v = oct(int(v))[-2:].replace('o', '0')
-        self.busses[self.bus - 1].send(v)
+        self.buses[self.bus - 1].send(v)
 
     def write(self):
         """
-        Writes all busses / lists to file.
+        Writes all buses / lists to file.
         """
         #TODO: allow a range of data formats
         print('[Writing all data lists to %s...]' % self.outfile)
         with open(self.outfile, 'w') as f:
-            for b in self.busses:
+            for b in self.buses:
                 f.write(' '.join(b.data))
                 f.write('\n')
 
@@ -272,6 +272,6 @@ if __name__ == '__main__':
     if DEBUG:
         print(musys)
     musys.run()
-    print(musys.busses[0].data)
+    print(musys.buses[0].data)
     musys.write()
 

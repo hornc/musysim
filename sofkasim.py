@@ -75,21 +75,28 @@ class Sofka:
 
 
 class Envelope:
-    durations = []  # Attack, On, Decay, Off
     def __init__(self, duration):
+        self.durations = []  # Attack, On, Decay, Off
         self.addtime(duration)
+        self.history = []
 
     def addtime(self, d):
+        if len(self.durations) == 4:
+            self.history.append(self.out(False))
+            self.durations = []
         self.durations.append(d)
 
-    def out(self):
+    def out(self, history=True):
+        if history:
+            self.addtime(0)
+            return self.history
         attack = min(self.durations[0], self.durations[1])
-        L1 = self.durations[0] / attack
+        L1 = min(1, self.durations[1] / self.durations[0])
         on = self.durations[1] - attack
         decay = min(self.durations[2], self.durations[3])
-        L3 = 1 - (decay / self.durations[2])
+        L3 = L1 * (1 - (decay / self.durations[2]))
         dur = attack + on + decay
-        return ["(env {t1} {t2} 0 {L1} {L1} {L3} {dur})".format(t1=attack, t2=on, L1=L1, L3=L3, dur=dur)]
+        return "(env {t1} {t2} 0 {L1} {L1} {L3} {dur})".format(t1=attack, t2=on, L1=L1, L3=L3, dur=dur)
 
 
 class Oscillator:

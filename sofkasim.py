@@ -51,16 +51,17 @@ class Sofka:
                 if 23 < n < 27:  # Envelopes
                     n = n - 24
                     dprint('Envelope', n + 1)
+                    d = self.secs(v)
                     if self.envelopes[n]:
-                        self.envelopes[n].setlevel(v)
+                        self.envelopes[n].addtime(d)
                     else:
-                        self.envelopes[n] = Envelope(v)
+                        self.envelopes[n] = Envelope(d)
                 if n == 60:  # Wait timer
                     d = self.secs(v) 
                     dprint('WAIT:', d)
                     self.oscillators[self.active].duration += d
                     if self.envelopes[self.active]:
-                        self.envelopes[self.active].settime(d)
+                        self.envelopes[self.active].addtime(d)
         # write the generated audio
         sources = [o for o in self.oscillators if o]
         sources += [e for e in self.envelopes if e]
@@ -74,21 +75,21 @@ class Sofka:
 
 
 class Envelope:
-    levels = []
-    durations = []
-    def __init__(self, level):
-        self.levels.append(level)
+    durations = []  # Attack, On, Decay, Off
+    def __init__(self, duration):
+        self.addtime(duration)
 
-    def setlevel(self, level):
-        self.levels.append(level)
-
-    def settime(self, d):
+    def addtime(self, d):
         self.durations.append(d)
 
     def out(self):
-        d1, d3 = self.durations[:2]
-        l1,l2 = self.levels[:2]
-        return ["(env {d1} 0 {d3} {l1} {l2} {l2})".format(d1=d1, d3=d3, l1=l1, l2=l2)]
+        attack = min(self.durations[0], self.durations[1])
+        L1 = self.durations[0] / attack
+        on = self.durations[1] - attack
+        decay = min(self.durations[2], self.durations[3])
+        L3 = 1 - (decay / self.durations[2])
+        dur = attack + on + decay
+        return ["(env {t1} {t2} 0 {L1} {L1} {L3} {dur})".format(t1=attack, t2=on, L1=L1, L3=L3, dur=dur)]
 
 
 class Oscillator:

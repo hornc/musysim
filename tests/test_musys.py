@@ -1,5 +1,5 @@
 import pytest
-from musysim import Compiler
+from musysim import Compiler, max_signed
 
 
 def test_register_addition():
@@ -37,3 +37,14 @@ def test_strict_left_right_eval():
     m = Compiler(code)
     m.run()
     assert m.EXP == 20  # Not -10!
+
+
+def test_max_signed():
+    # TODO: What is the most sensible overflow behaviour in all cases?
+    assert max_signed(5) == 5
+    assert max_signed(-5) == -5
+    assert max_signed(-2048 + 5) == -2043
+    assert max_signed(2047 + 5) == -4
+    #assert max_signed(-2048 - 5) == 4
+    #assert max_signed(0xfff + 5) == 4
+

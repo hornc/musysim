@@ -6,6 +6,7 @@ https://esolangs.org/wiki/MUSYS simulator
 import argparse
 import re
 import sys
+from random import randint
 
 from devices import devices
 
@@ -15,17 +16,10 @@ ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 
 
-def mrand():
-    """
-    a random number R
-    such that 1 <= R <= EXP
-    or EXP <= R <= 1 if EXP < O
-    """
-    pass
-
-
 def max_signed(i):
-    """Return i as a singed MAX integer."""
+    """Return i as a signed MAX integer."""
+    if -MAX // 2 <= i <= MAX // 2:
+        return i
     signbit = i & ((MAX + 1) // 2)
     return -(i - signbit) if signbit else i
 
@@ -105,6 +99,17 @@ class Compiler():
             print("  GOTO %s IN %s" % (lineno, self.lines))
         self.pointer = self.lines[lineno]
 
+    def mrand(self, e):
+        """
+        A random number R
+        such that 1 <= R <= EXP
+        or EXP <= R <= 1 if EXP < O
+        """
+        if e == 0:
+            return 0
+        sign = e // abs(e)
+        return randint(1, abs(e)) * sign
+
     def expr_evaluate(self, expression):
         operators = {
                 '+': lambda e, x: e + x,
@@ -121,7 +126,7 @@ class Compiler():
             if p in operators.keys():
                 op = operators[p]
             elif p in '↑^':
-                self.EXP = mrand(self.EXP)
+                self.EXP = self.mrand(self.EXP)
             elif op is None:
                 self.EXP = self.get_val(p)
             else:

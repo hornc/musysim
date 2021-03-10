@@ -5,7 +5,6 @@ https://esolangs.org/wiki/MUSYS simulator
 
 import argparse
 import re
-import sys
 from random import randint
 
 from devices import devices
@@ -15,6 +14,15 @@ MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
+
+CONST = '[0-9]+'
+VAR = '[A-Z]'
+ITEM = f'({CONST}|{VAR}|←)'
+OP = r'[-+&<>^/*]'
+EXPR = f'{ITEM}({OP}{ITEM})*'
+RE_EXPR = re.compile(EXPR)
+RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
+RE_GOTO = re.compile(r'G([0-9]+)')
 
 
 def dprint(*s):
@@ -30,21 +38,49 @@ def max_signed(i):
     return -(i - signbit) if signbit else i
 
 
+class Pointer():
+    def __init__(self, obj):
+        self.l = 0
+        self.c = 0
+        self.obj = obj
+
+    def advance(self, n=1):
+        """Advance the pointer."""
+        self.c += n
+        if self.c >= len(self.obj.main_program[self.l]):
+            self.c = 0
+            self.l += 1
+        if self.l < len(self.obj.main_program):
+            return True
+
+    def goto(self, lineno):
+        self.c = 0
+        dprint('LINES', self.obj.lines)
+        self.l = self.obj.lines[lineno]
+        return self.l
+
+    def __repr__(self):
+        return f'<Pointer> ({self.l}, {self.c})'
+
+
 class Compiler():
     buses = []
     lines = {}
     macros = {}
     paragraphs = {}
     variables = {}
-    pointer = 0
 
     def __init__(self, source, input_=None):
         self.main_program, macros = re.split(r'\$', source.strip())
+        self.pointer = Pointer(self)
         self.store_input(input_)
         self.paragraph = None
         self.EXP = 0  # The expression register
         self.bus = 1  # Current output bus (1-6)
         self.outfile = 'musys.out'
+        self.state = None
+        self.nest = 0
+
         for i in range(6):
             self.buses.append(Bus(i + 1))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
@@ -76,9 +112,11 @@ class Compiler():
                 continue
             self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
 
-    def assign(self, var, value):
-        v = self.get_val(value)
-        dprint('  ASSIGN "%s" = (%s) TO %s' % (value, v, var))
+    def assign(self, var, expr):
+        #temp = self.EXP
+        v = self.expr_evaluate(expr)
+        #self.EXP = temp
+        dprint('  ASSIGN "%s" = (%s) TO %s' % (expr, v, var))
         self.variables[var] = v
 
     def goto(self, lineno):
@@ -95,6 +133,17 @@ class Compiler():
             return 0
         sign = e // abs(e)
         return randint(1, abs(e)) * sign
+
+    def get_val(self, symbol):
+        # TODO: this should not be called by anything other than expr_evaluate()
+        if not symbol:
+            return 0
+        try:
+            return int(symbol)
+        except ValueError as e:
+            if re.search(r'[+&<>^_*/-]', symbol):
+                return self.expr_evaluate(symbol)
+            return self.variables.get(symbol, 0)
 
     def expr_evaluate(self, expression):
         """
@@ -127,18 +176,13 @@ class Compiler():
             else:
                 self.EXP = op(self.EXP, self.get_val(p))
         self.EXP = max_signed(self.EXP)
+        dprint('EXPR:', expression, '=>', self.EXP)
         return self.EXP
 
-    def get_val(self, symbol):
-        # TODO: this should not be called by anything other than expr_evaluate()
-        if not symbol:
-            return 0
-        try:
-            return int(symbol)
-        except ValueError as e:
-            if re.search(r'[+&<>^_*/-]', symbol):
-                return self.expr_evaluate(symbol)
-            return self.variables.get(symbol, 0)
+    def str_out(self, s):
+        """ Output a string / character if EXP is non-zero."""
+        if self.EXP:
+            print(s, end='')
 
     def split_into_blocks(self, routine):
         """Split a string of code into blocks."""
@@ -146,29 +190,90 @@ class Compiler():
         blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
         return blocks
 
-    def evaluate(self, routine, increment=True):
+
+    def evaluate(self):
         """
         Evaluates routine.
         "'routine' is used to denote a section of program that may use any MUSYS facilities provided
         that bracketing characters, (), [], "", '' are nested." (Grogono, 1973. p.373)
         """
+        l, c, o = self.pointer.l, self.pointer.c, self.pointer.obj
+        if o == self:
+            routine = self.main_program[l]
+        else:
+            routine = o.body
+        routine = routine[c:]
+        symbol = routine[0]
+        mov = 1  # number of symbols to advance after this read
 
+        if self.state == 'FCOND':  # in False condition
+            if symbol == '[':
+                self.nest += 1
+            elif symbol == ']':
+                self.nest -= 1
+            if self.nest == 0:
+                self.state = None
+            return self.pointer.advance()
+
+        if not self.state == 'STRING':  # Strings comment / STDOUT
+            m = RE_EXPR.match(routine)
+            dprint('ROUTINE:', routine, m, RE_ASSIGN.match(routine))
+            dprint(self.pointer)
+
+        if self.state == 'STRING':
+            if symbol == '"':
+                self.state = None
+                self.str_out('\n')
+            else:
+                self.str_out(symbol)
+        elif symbol == '"':
+            self.state = 'STRING'
+        elif symbol == '\\':  # print EXP to STDOUT
+            print(self.EXP)
+        elif symbol == '[':
+            m = re.match(r'([^\[]*)\[(.*)\]', routine)
+            expr, subroutine = m.group(1, 2)
+            cond = self.expr_evaluate(expr) > 0
+            dprint("  COND %s (%s) => %s -- %s" % (expr, cond, subroutine, m.group(0)))
+            if not cond:
+                self.state = 'FCOND'
+                self.nest += 1
+                #mov = len(m.group(0))
+        #elif symbol in '] ':
+        #    pass
+        elif RE_ASSIGN.match(routine):  # Assignment
+            m = RE_ASSIGN.match(routine)
+            var, expr = m.group(1, 2)
+            self.assign(var, expr)
+            mov = len(m.group(0))
+            dprint('MOV', mov)
+        elif RE_GOTO.match(routine):  # GOTO
+            m = RE_GOTO.match(routine)
+            dprint('GOTO', m.group(1))
+            return self.pointer.goto(int(m.group(1)))
+
+        elif m:
+            dprint('FOUND:', m.group())
+            expr = m.group()
+            self.expr_evaluate(expr)
+            mov = len(expr)
+
+        return self.pointer.advance(mov)
+
+
+    def Xevaluate(self, increment=True):
+        if self.pointer[2] == self:
+            routine = self.main_program[self.pointer[0]]
+        else:
+            routine = self.pointer[2].body
         routine = routine.strip()
         if increment:
-            self.pointer += 1
+            self.pointer[0] += 1
         repeat_match = re.match(r'(.+)\((.)\)', routine)
-        output_match = re.match(r'([^"]+)?("(.*)"|\\)', routine)
         send_match = re.match(r'([^\s\.:]+)(\.|:)(.*)$', routine)
-        #conditional_match = re.match(r'(.+)\[(.)\]', routine)
-        if '[' in routine:  # conditional
-            expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
-            dprint("  COND %s (%s) => %s" % (expr, self.get_val(expr) > 0, subroutine))
-            if self.get_val(expr) > 0:
-                for s in self.split_into_blocks(subroutine):
-                    dprint(">>>" + s)
-                    self.evaluate(s, False)
-        elif send_match:
+        if send_match:
             v, w, remainder = send_match.groups()
+            dprint('REMAINDER:', remainder)
             if not RE_DEVICE.match(v):
                 v = self.get_val(v)
             self.output(v, w)
@@ -178,25 +283,14 @@ class Compiler():
             expr, routine = repeat_match.groups()
             for i in range(self.get_val(expr)):
                 self.evaluate(routine)
-        elif output_match:  # STDOUT for monitor and debug
-            val = self.get_val(output_match.group(1))
-            output = output_match.group(2).strip('"')
-            if output == '\\':
-                print(output.replace('\\', str(self.EXP)))
-            elif val > 0:
-                print(output)
         elif '!' in routine:  # select output bus
             n = re.search(r'([0-9])!', routine).group(1)
             self.bus = int(n)
-        elif '=' in routine:  # assignment
-            var, val = re.split(r'(\w)+\s*=\s*', routine)[-2:]
-            self.assign(var, val)
-        elif routine[0] == 'G':  # GOTO
-            lineno = int(re.match('G([0-9]+)', routine).group(1))
-            self.goto(lineno)
         elif '#' in routine:
             # TODO: Macro calls can apparently be nested
-            self.evaluate(self.call_macro(routine), False)
+            macro = self.call_macro(routine)
+            self.pointer = [0, 0, macro]
+            #self.evaluate()
         else:  # simply evaluate the line
             self.expr_evaluate(routine)
 
@@ -228,22 +322,25 @@ class Compiler():
 
     def run(self):
         """ Run the program!"""
-        while self.pointer < len(self.main_program):
-            self.evaluate(self.main_program[self.pointer])
+        while self.evaluate():
+            pass
 
 
 class Macro():
     def __init__(self, raw):
         data = [t.strip() for t in re.split('(^[A-Z]{2,6})', raw.strip()) if t]
         self.name, self.body = data
+        self.values = []
         assert len(self.name) < 7
 
     def call(self, args):
         result = self.body
         for i, a in enumerate(args):
-            result = result.replace('%' + chr(65 + i), str(a))
-        print('Called %s with %s. RESULT = %s' % (self.name, args, result))
-        return result
+            result = result.replace('%' + ALPHA[i], str(a))
+        dprint('Called %s with %s. RESULT = %s' % (self.name, args, result))
+        #return result
+        self.values = args
+        return self
 
     def __repr__(self):
         return "Macro <%s>: %s" % (self.name, self.body)

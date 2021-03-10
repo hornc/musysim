@@ -10,10 +10,16 @@ from random import randint
 
 from devices import devices
 
+
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
+
+
+def dprint(*s):
+    if DEBUG:
+        print(*s)
 
 
 def max_signed(i):
@@ -54,14 +60,6 @@ class Compiler():
     def __repr__(self):
         return """==MUSYS program==\n%s\n==Lines==\n%s\n==Macros==\n%s""" % (self.main_program, self.lines, '\n'.join([str(v) for m, v in self.macros.items()]))
 
-    def split_into_blocks(self, routine):
-        """Split a string of code into blocks."""
-        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)|(#[^;]+;)')
-        blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
-        if DEBUG:
-            print("  BLOCKS: %s" % blocks)
-        return blocks
-
     def store_input(self, input_):
         if not input_:
             return
@@ -80,13 +78,11 @@ class Compiler():
 
     def assign(self, var, value):
         v = self.get_val(value)
-        if DEBUG:
-            print('  ASSIGN "%s" = (%s) TO %s' % (value, v, var))
+        dprint('  ASSIGN "%s" = (%s) TO %s' % (value, v, var))
         self.variables[var] = v
 
     def goto(self, lineno):
-        if DEBUG:
-            print("  GOTO %s IN %s" % (lineno, self.lines))
+        dprint("  GOTO %s IN %s" % (lineno, self.lines))
         self.pointer = self.lines[lineno]
 
     def mrand(self, e):
@@ -144,6 +140,11 @@ class Compiler():
                 return self.expr_evaluate(symbol)
             return self.variables.get(symbol, 0)
 
+    def split_into_blocks(self, routine):
+        """Split a string of code into blocks."""
+        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)|(#[^;]+;)')
+        blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
+        return blocks
 
     def evaluate(self, routine, increment=True):
         """
@@ -161,16 +162,12 @@ class Compiler():
         #conditional_match = re.match(r'(.+)\[(.)\]', routine)
         if '[' in routine:  # conditional
             expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
-            if DEBUG:
-                print("  COND %s (%s) => %s" % (expr, self.get_val(expr) > 0, subroutine))
-                #print("  REPEAT MATCH: %s" % repeat_match)
+            dprint("  COND %s (%s) => %s" % (expr, self.get_val(expr) > 0, subroutine))
             if self.get_val(expr) > 0:
                 for s in self.split_into_blocks(subroutine):
-                    if DEBUG:
-                        print(">>>" + s)
+                    dprint(">>>" + s)
                     self.evaluate(s, False)
         elif send_match:
-            #print('DEVICE:', send_match.groups())
             v, w, remainder = send_match.groups()
             if not RE_DEVICE.match(v):
                 v = self.get_val(v)
@@ -260,7 +257,6 @@ class Bus():
 
     def send(self, n):
         """n is 2 or 4 digit octal string"""
-        #print('DEBUG BUS', n)
         if self.buffer:
             self.data.append(self.buffer + n)
             self.buffer = ''
@@ -288,8 +284,7 @@ if __name__ == '__main__':
     with open(source, 'r') as f:
         musys = Compiler(f.read(), input_)
 
-    if DEBUG:
-        print(musys)
+    dprint(musys)
     musys.run()
     print(musys.buses[0].data)
     musys.write()

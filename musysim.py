@@ -23,6 +23,7 @@ EXPR = f'{ITEM}({OP}{ITEM})*'
 RE_EXPR = re.compile(EXPR)
 RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
 RE_GOTO = re.compile(r'G([0-9]+)')
+RE_MACRO = re.compile(r'#([A-Z]+)\s+(.*);')
 
 
 def dprint(*s):
@@ -43,14 +44,18 @@ class Pointer():
         self.l = 0
         self.c = 0
         self.obj = obj
+        self.stack = []
 
     def advance(self, n=1):
         """Advance the pointer."""
         self.c += n
-        if self.c >= len(self.obj.main_program[self.l]):
-            self.c = 0
-            self.l += 1
-        if self.l < len(self.obj.main_program):
+        if isinstance(self.obj, Compiler):
+            if self.c >= len(self.obj.main_program[self.l]):
+                self.c = 0
+                self.l += 1
+            if self.l < len(self.obj.main_program):
+                return True
+        else:
             return True
 
     def goto(self, lineno):
@@ -58,6 +63,12 @@ class Pointer():
         dprint('LINES', self.obj.lines)
         self.l = self.obj.lines[lineno]
         return self.l
+
+    def push(self, obj):
+        self.stack.append(self.obj)
+        self.obj = obj
+        self.l = 0
+        self.c = 0
 
     def __repr__(self):
         return f'<Pointer> ({self.l}, {self.c})'
@@ -72,6 +83,7 @@ class Compiler():
 
     def __init__(self, source, input_=None):
         self.main_program, macros = re.split(r'\$', source.strip())
+        self.main_program = [line for line in self.main_program.split('\n') if line]
         self.pointer = Pointer(self)
         self.store_input(input_)
         self.paragraph = None
@@ -84,8 +96,6 @@ class Compiler():
         for i in range(6):
             self.buses.append(Bus(i + 1))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
-        # break program into blocks
-        self.main_program = self.split_into_blocks(self.main_program)
         # extract any line numbers
         for i, block in enumerate(self.main_program):
             lineno = re.match(r'^([0-9]+)\s(.*)$', block)
@@ -118,10 +128,6 @@ class Compiler():
         #self.EXP = temp
         dprint('  ASSIGN "%s" = (%s) TO %s' % (expr, v, var))
         self.variables[var] = v
-
-    def goto(self, lineno):
-        dprint("  GOTO %s IN %s" % (lineno, self.lines))
-        self.pointer = self.lines[lineno]
 
     def mrand(self, e):
         """
@@ -184,13 +190,6 @@ class Compiler():
         if self.EXP:
             print(s, end='')
 
-    def split_into_blocks(self, routine):
-        """Split a string of code into blocks."""
-        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)|(#[^;]+;)')
-        blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
-        return blocks
-
-
     def evaluate(self):
         """
         Evaluates routine.
@@ -198,10 +197,12 @@ class Compiler():
         that bracketing characters, (), [], "", '' are nested." (Grogono, 1973. p.373)
         """
         l, c, o = self.pointer.l, self.pointer.c, self.pointer.obj
+        if self.pointer.stack:
+            dprint('Something to do...')
         if o == self:
             routine = self.main_program[l]
         else:
-            routine = o.body
+            routine = o.routine
         routine = routine[c:]
         symbol = routine[0]
         mov = 1  # number of symbols to advance after this read
@@ -217,7 +218,7 @@ class Compiler():
 
         if not self.state == 'STRING':  # Strings comment / STDOUT
             m = RE_EXPR.match(routine)
-            dprint('ROUTINE:', routine, m, RE_ASSIGN.match(routine))
+            dprint('ROUTINE:', routine)
             dprint(self.pointer)
 
         if self.state == 'STRING':
@@ -238,19 +239,30 @@ class Compiler():
             if not cond:
                 self.state = 'FCOND'
                 self.nest += 1
-                #mov = len(m.group(0))
+        elif symbol == '#':  # Macro
+            dprint('MACRO FOUND!')
+
+            macro = self.call_macro(routine)
+            self.pointer.push(macro)
+            return macro
         #elif symbol in '] ':
         #    pass
+        elif RE_GOTO.match(routine):  # GOTO
+            m = RE_GOTO.match(routine)
+            dprint('GOTO', m.group(1))
+            return self.pointer.goto(int(m.group(1)))
+        elif RE_DEVICE.match(routine):  # device found
+            device = RE_DEVICE.match(routine).group(0)
+            self.buffer = device
+            dprint('DEVICE', device)
+            return self.pointer.advance(len(device))
+
         elif RE_ASSIGN.match(routine):  # Assignment
             m = RE_ASSIGN.match(routine)
             var, expr = m.group(1, 2)
             self.assign(var, expr)
             mov = len(m.group(0))
             dprint('MOV', mov)
-        elif RE_GOTO.match(routine):  # GOTO
-            m = RE_GOTO.match(routine)
-            dprint('GOTO', m.group(1))
-            return self.pointer.goto(int(m.group(1)))
 
         elif m:
             dprint('FOUND:', m.group())
@@ -295,9 +307,10 @@ class Compiler():
             self.expr_evaluate(routine)
 
     def call_macro(self, routine):
-        re_macro = re.compile(r'#([A-Z]+)\s+(.*);')
-        name, parameters = re_macro.match(routine).groups()
+        m = RE_MACRO.match(routine)
+        name, parameters = m.group(1, 2)
         values = [self.expr_evaluate(p) for p in parameters.split(',')]
+        self.pointer.advance(len(m.group(0)))
         return self.macros[name].call(values)
 
     def output(self, value, width):
@@ -340,6 +353,7 @@ class Macro():
         dprint('Called %s with %s. RESULT = %s' % (self.name, args, result))
         #return result
         self.values = args
+        self.routine = result
         return self
 
     def __repr__(self):

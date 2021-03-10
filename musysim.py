@@ -78,16 +78,6 @@ class Compiler():
                 continue
             self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
 
-    def get_val(self, symbol):
-        if not symbol:
-            return 0
-        try:
-            return int(symbol)
-        except ValueError as e:
-            if re.search(r'[+&<>^_*/-]', symbol):
-                return self.expr_evaluate(symbol)
-            return self.variables.get(symbol, 0)
-
     def assign(self, var, value):
         v = self.get_val(value)
         if DEBUG:
@@ -111,6 +101,15 @@ class Compiler():
         return randint(1, abs(e)) * sign
 
     def expr_evaluate(self, expression):
+        """
+            Evaluates an expression.
+            An expression is composed of items and operators.
+            1) Decimal constant (-2048 to +2047)
+            2) Variable [A-Z]
+            3) Device code (unclear how this can be part of an expression)
+            4) ← (read input from current paragraph)
+            Effect: updates EXP
+        """
         operators = {
                 '+': lambda e, x: e + x,
                 '-': lambda e, x: e - x,
@@ -134,10 +133,25 @@ class Compiler():
         self.EXP = max_signed(self.EXP)
         return self.EXP
 
+    def get_val(self, symbol):
+        # TODO: this should not be called by anything other than expr_evaluate()
+        if not symbol:
+            return 0
+        try:
+            return int(symbol)
+        except ValueError as e:
+            if re.search(r'[+&<>^_*/-]', symbol):
+                return self.expr_evaluate(symbol)
+            return self.variables.get(symbol, 0)
+
+
     def evaluate(self, routine, increment=True):
         """
         Evaluates routine.
+        "'routine' is used to denote a section of program that may use any MUSYS facilities provided
+        that bracketing characters, (), [], "", '' are nested." (Grogono, 1973. p.373)
         """
+
         routine = routine.strip()
         if increment:
             self.pointer += 1

@@ -43,6 +43,7 @@ class Pointer():
     def __init__(self, obj):
         self.l = 0
         self.c = 0
+        self.counter = 1
         self.obj = obj
         self.stack = []
 
@@ -50,13 +51,36 @@ class Pointer():
         """Advance the pointer."""
         self.c += n
         if isinstance(self.obj, Compiler):
-            if self.c >= len(self.obj.main_program[self.l]):
-                self.c = 0
-                self.l += 1
-            if self.l < len(self.obj.main_program):
-                return True
+            if self.l >= len(self.obj.main_program):
+                return False
+            chars = len(self.obj.main_program[self.l])
+            lines = len(self.obj.main_program)
         else:
+            chars = len(self.obj.routine)
+            lines = 1
+
+        if self.c >= chars:
+            self.c = 0
+            self.l += 1
+            if isinstance(self.obj, Macro):
+                return self.pop()
+        if self.l < lines:
             return True
+
+    def decr_repeat(self):
+        """
+        Reached the end of a repeat block,
+        either repeat the block, or resume.
+        """
+        self.counter -= 1
+        if not self.counter:
+            current = (self.l, self.c)
+            self.pop()  # repeat finished, resume
+            self.l, self.c = current
+            return True  # TODO: standardise these return values to something meaningful
+        dprint('DECR', self.counter)
+        self.l = self.stack[-1][0]
+        self.c = self.stack[-1][1]
 
     def goto(self, lineno):
         self.c = 0
@@ -64,14 +88,25 @@ class Pointer():
         self.l = self.obj.lines[lineno]
         return self.l
 
-    def push(self, obj):
-        self.stack.append(self.obj)
+    def pop(self):
+        #self.obj.release()
+        self.obj.values = []
+        self.obj.routine = ''
+        loc = self.stack.pop()
+        self.l, self.c, self.obj, self.counter = loc
+        dprint('NEW LOCATION:', loc)
+        return self.obj
+
+    def push(self, obj, counter=0):
+        self.stack.append((self.l, self.c, self.obj, self.counter))
         self.obj = obj
-        self.l = 0
-        self.c = 0
+        if not counter:  # If this is a repeat loop, don't zero the position
+            self.l = 0
+            self.c = 0
+        self.counter = counter
 
     def __repr__(self):
-        return f'<Pointer> ({self.l}, {self.c})'
+        return f'<Pointer> ({self.l}, {self.c}) Counter: {self.counter} {str(self.obj)[:5]}'
 
 
 class Compiler():
@@ -91,7 +126,7 @@ class Compiler():
         self.bus = 1  # Current output bus (1-6)
         self.outfile = 'musys.out'
         self.state = None
-        self.nest = 0
+        self.nest = 0  # used for tracking conditional nesting
 
         for i in range(6):
             self.buses.append(Bus(i + 1))
@@ -175,6 +210,11 @@ class Compiler():
         for p in parts:
             if p in operators.keys():
                 op = operators[p]
+            elif p == '%':
+                value = self.expr_evaluate(expression[2:-1]) - 1
+                dprint('MACRO formal parameter found:', p, expression, value, 'Macro:', self.pointer.obj.name, self.pointer.obj.values, self.pointer.obj.values[value])
+                self.EXP = self.pointer.obj.values[value]
+                break
             elif p in '↑^':
                 self.EXP = self.mrand(self.EXP)
             elif op is None:
@@ -197,9 +237,9 @@ class Compiler():
         that bracketing characters, (), [], "", '' are nested." (Grogono, 1973. p.373)
         """
         l, c, o = self.pointer.l, self.pointer.c, self.pointer.obj
-        if self.pointer.stack:
-            dprint('Something to do...')
         if o == self:
+            if l >= len(self.main_program):
+                return False
             routine = self.main_program[l]
         else:
             routine = o.routine
@@ -231,7 +271,7 @@ class Compiler():
             self.state = 'STRING'
         elif symbol == '\\':  # print EXP to STDOUT
             print(self.EXP)
-        elif symbol == '[':
+        elif symbol == '[':  # Conditional block
             m = re.match(r'([^\[]*)\[(.*)\]', routine)
             expr, subroutine = m.group(1, 2)
             cond = self.expr_evaluate(expr) > 0
@@ -239,9 +279,17 @@ class Compiler():
             if not cond:
                 self.state = 'FCOND'
                 self.nest += 1
-        elif symbol == '#':  # Macro
-            dprint('MACRO FOUND!')
+        elif symbol == '(':  # Repeat block
+            dprint('REPEAT FOUND!', routine, self.pointer)
+            self.pointer.push(self.pointer.obj, self.EXP)
+        elif symbol == ')':  # End of repeat block
+            dprint('END REPEAT FOUND!', routine, self.pointer)
+            self.pointer.decr_repeat()
 
+
+        elif symbol == '#':  # Macro
+            dprint('MACRO FOUND!', len(routine))
+            #self.pointer.advance(len(routine))
             macro = self.call_macro(routine)
             self.pointer.push(macro)
             return macro
@@ -256,6 +304,11 @@ class Compiler():
             self.buffer = device
             dprint('DEVICE', device)
             return self.pointer.advance(len(device))
+        elif symbol in '.:':  # Send output to a list
+            widths = {'.': 6, ':': 12}
+            output = self.buffer if self.buffer is not None else self.EXP
+            self.output(output, widths[symbol])
+            self.buffer = None
 
         elif RE_ASSIGN.match(routine):  # Assignment
             m = RE_ASSIGN.match(routine)
@@ -274,6 +327,7 @@ class Compiler():
 
 
     def Xevaluate(self, increment=True):
+        # TODO: remove this, old method
         if self.pointer[2] == self:
             routine = self.main_program[self.pointer[0]]
         else:
@@ -298,13 +352,6 @@ class Compiler():
         elif '!' in routine:  # select output bus
             n = re.search(r'([0-9])!', routine).group(1)
             self.bus = int(n)
-        elif '#' in routine:
-            # TODO: Macro calls can apparently be nested
-            macro = self.call_macro(routine)
-            self.pointer = [0, 0, macro]
-            #self.evaluate()
-        else:  # simply evaluate the line
-            self.expr_evaluate(routine)
 
     def call_macro(self, routine):
         m = RE_MACRO.match(routine)

@@ -1,0 +1,26 @@
+"RANDOM COMPOSITION USING THE NOTE MACRO..."
+
+#NOTE 56, 12, 15;
+#NOTE 52, 12, 15;
+#NOTE 50, 12, 15;
+#NOTE 40, 15, 3;
+#NOTE 42, 14, 4;
+#NOTE 44, 13, 5;
+#NOTE 46, 5, 10;
+50(#NOTE 60^+5 , 12, 15;)
+#NOTE 30, 15, 40;
+#NOTE 20, 15, 40;
+#NOTE 10, 15, 50;
+#NOTE 60, 15, 5;
+T1.15.
+60(
+ #NOTE 38^+10, 15, 7^+5;
+ #NOTE 10^+10, 15, 10;
+)
+
+#NOTE 7, 15, 50;
+#NOTE 3, 15, 60;
+
+$
+
+NOTE O1.%A. A1.%B. E1.%B/2+7. T1.%C-1. E1.%B/2+2<7. T1.1. T=T+%C @

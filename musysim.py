@@ -18,8 +18,8 @@ RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 CONST = '[0-9]+'
 VAR = '[A-Z]'
 ITEM = f'({CONST}|{VAR}|←)'
-OP = r'[-+&<>^/*]'
-EXPR = f'{ITEM}({OP}{ITEM})*'
+OP = r'[-+&<>/*]'
+EXPR = f'{ITEM}([↑^]|{OP}{ITEM})*'
 RE_EXPR = re.compile(EXPR)
 RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
 RE_GOTO = re.compile(r'G([0-9]+)')
@@ -94,7 +94,7 @@ class Pointer():
         self.obj.routine = ''
         loc = self.stack.pop()
         self.l, self.c, self.obj, self.counter = loc
-        dprint('NEW LOCATION:', loc)
+        dprint('NEW LOCATION:', str(loc)[:5])
         return self.obj
 
     def push(self, obj, counter=0):

@@ -158,9 +158,7 @@ class Compiler():
             self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
 
     def assign(self, var, expr):
-        #temp = self.EXP
         v = self.expr_evaluate(expr)
-        #self.EXP = temp
         dprint('  ASSIGN "%s" = (%s) TO %s' % (expr, v, var))
         self.variables[var] = v
 
@@ -328,28 +326,7 @@ class Compiler():
 
     def Xevaluate(self, increment=True):
         # TODO: remove this, old method
-        if self.pointer[2] == self:
-            routine = self.main_program[self.pointer[0]]
-        else:
-            routine = self.pointer[2].body
-        routine = routine.strip()
-        if increment:
-            self.pointer[0] += 1
-        repeat_match = re.match(r'(.+)\((.)\)', routine)
-        send_match = re.match(r'([^\s\.:]+)(\.|:)(.*)$', routine)
-        if send_match:
-            v, w, remainder = send_match.groups()
-            dprint('REMAINDER:', remainder)
-            if not RE_DEVICE.match(v):
-                v = self.get_val(v)
-            self.output(v, w)
-            if remainder:
-                self.evaluate(remainder, False)
-        elif repeat_match:
-            expr, routine = repeat_match.groups()
-            for i in range(self.get_val(expr)):
-                self.evaluate(routine)
-        elif '!' in routine:  # select output bus
+        if '!' in routine:  # select output bus
             n = re.search(r'([0-9])!', routine).group(1)
             self.bus = int(n)
 
@@ -398,7 +375,6 @@ class Macro():
         for i, a in enumerate(args):
             result = result.replace('%' + ALPHA[i], str(a))
         dprint('Called %s with %s. RESULT = %s' % (self.name, args, result))
-        #return result
         self.values = args
         self.routine = result
         return self

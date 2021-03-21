@@ -124,6 +124,7 @@ class Compiler():
         self.paragraph = None
         self.EXP = 0  # The expression register
         self.bus = 1  # Current output bus (1-6)
+        self.buffer = None  # buffer for storing device codes
         self.outfile = 'musys.out'
         self.state = None
         self.nest = 0  # used for tracking conditional nesting
@@ -283,8 +284,6 @@ class Compiler():
         elif symbol == ')':  # End of repeat block
             dprint('END REPEAT FOUND!', routine, self.pointer)
             self.pointer.decr_repeat()
-
-
         elif symbol == '#':  # Macro
             dprint('MACRO FOUND!', len(routine))
             #self.pointer.advance(len(routine))
@@ -302,19 +301,20 @@ class Compiler():
             self.buffer = device
             dprint('DEVICE', device)
             return self.pointer.advance(len(device))
-        elif symbol in '.:':  # Send output to a list
+        elif symbol in '.:!':  # Send output to a list
             widths = {'.': 6, ':': 12}
             output = self.buffer if self.buffer is not None else self.EXP
-            self.output(output, widths[symbol])
-            self.buffer = None
-
+            if symbol == '!':
+                self.bus = output
+            else:
+                self.output(output, widths[symbol])
+                self.buffer = None
         elif RE_ASSIGN.match(routine):  # Assignment
             m = RE_ASSIGN.match(routine)
             var, expr = m.group(1, 2)
             self.assign(var, expr)
             mov = len(m.group(0))
             dprint('MOV', mov)
-
         elif m:
             dprint('FOUND:', m.group())
             expr = m.group()
@@ -323,12 +323,6 @@ class Compiler():
 
         return self.pointer.advance(mov)
 
-
-    def Xevaluate(self, increment=True):
-        # TODO: remove this, old method
-        if '!' in routine:  # select output bus
-            n = re.search(r'([0-9])!', routine).group(1)
-            self.bus = int(n)
 
     def call_macro(self, routine):
         m = RE_MACRO.match(routine)

@@ -13,7 +13,6 @@ from devices import devices
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 
 CONST = '[0-9]+'
 VAR = '[A-Z]'
@@ -22,6 +21,7 @@ OP = r'[-+&<>/*]'
 EXPR = f'{ITEM}([↑^]|{OP}{ITEM})*'
 RE_EXPR = re.compile(EXPR)
 RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
+RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 RE_GOTO = re.compile(r'G([0-9]+)')
 RE_MACRO = re.compile(r'#([A-Z]+)\s+(.*);')
 
@@ -89,7 +89,6 @@ class Pointer():
         return self.l
 
     def pop(self):
-        #self.obj.release()
         self.obj.values = []
         self.obj.routine = ''
         loc = self.stack.pop()
@@ -225,7 +224,7 @@ class Compiler():
         return self.EXP
 
     def str_out(self, s):
-        """ Output a string / character if EXP is non-zero."""
+        """Output a string / character if EXP is non-zero."""
         if self.EXP:
             print(s, end='')
 
@@ -286,7 +285,6 @@ class Compiler():
             self.pointer.decr_repeat()
         elif symbol == '#':  # Macro
             dprint('MACRO FOUND!', len(routine))
-            #self.pointer.advance(len(routine))
             macro = self.call_macro(routine)
             self.pointer.push(macro)
             return macro

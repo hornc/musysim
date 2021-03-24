@@ -5,15 +5,30 @@ https://esolangs.org/wiki/MUSYS simulator
 
 import argparse
 import re
-import sys
 from random import randint
 
 from devices import devices
 
+
 MAX = 0xfff  # 12 bit maximum values "decimal constant -2048 to +2047"
 DEBUG = False
 ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+CONST = '[0-9]+'
+VAR = '[A-Z]'
+ITEM = f'({CONST}|{VAR}|←)'
+OP = r'[-+&<>/*]'
+EXPR = f'{ITEM}([↑^]|{OP}{ITEM})*'
+RE_EXPR = re.compile(EXPR)
+RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
+RE_GOTO = re.compile(r'G([0-9]+)')
+RE_MACRO = re.compile(r'#([A-Z]+)\s+(.*);')
+
+
+def dprint(*s):
+    if DEBUG:
+        print(*s)
 
 
 def max_signed(i):
@@ -24,26 +39,98 @@ def max_signed(i):
     return -(i - signbit) if signbit else i
 
 
+class Pointer():
+    def __init__(self, obj):
+        self.l = 0
+        self.c = 0
+        self.counter = 1
+        self.obj = obj
+        self.stack = []
+
+    def advance(self, n=1):
+        """Advance the pointer."""
+        self.c += n
+        if isinstance(self.obj, Compiler):
+            if self.l >= len(self.obj.main_program):
+                return False
+            chars = len(self.obj.main_program[self.l])
+            lines = len(self.obj.main_program)
+        else:
+            chars = len(self.obj.routine)
+            lines = 1
+
+        if self.c >= chars:
+            self.c = 0
+            self.l += 1
+            if isinstance(self.obj, Macro):
+                return self.pop()
+        if self.l < lines:
+            return True
+
+    def decr_repeat(self):
+        """
+        Reached the end of a repeat block,
+        either repeat the block, or resume.
+        """
+        self.counter -= 1
+        if not self.counter:
+            current = (self.l, self.c)
+            self.pop()  # repeat finished, resume
+            self.l, self.c = current
+            return True  # TODO: standardise these return values to something meaningful
+        dprint('DECR', self.counter)
+        self.l = self.stack[-1][0]
+        self.c = self.stack[-1][1]
+
+    def goto(self, lineno):
+        self.c = 0
+        dprint('LINES', self.obj.lines)
+        self.l = self.obj.lines[lineno]
+        return self.l
+
+    def pop(self):
+        self.obj.values = []
+        self.obj.routine = ''
+        loc = self.stack.pop()
+        self.l, self.c, self.obj, self.counter = loc
+        dprint('NEW LOCATION:', str(loc)[:5])
+        return self.obj
+
+    def push(self, obj, counter=0):
+        self.stack.append((self.l, self.c, self.obj, self.counter))
+        self.obj = obj
+        if not counter:  # If this is a repeat loop, don't zero the position
+            self.l = 0
+            self.c = 0
+        self.counter = counter
+
+    def __repr__(self):
+        return f'<Pointer> ({self.l}, {self.c}) Counter: {self.counter} {str(self.obj)[:5]}'
+
+
 class Compiler():
     buses = []
     lines = {}
     macros = {}
     paragraphs = {}
     variables = {}
-    pointer = 0
 
     def __init__(self, source, input_=None):
         self.main_program, macros = re.split(r'\$', source.strip())
+        self.main_program = [line for line in self.main_program.split('\n') if line]
+        self.pointer = Pointer(self)
         self.store_input(input_)
         self.paragraph = None
         self.EXP = 0  # The expression register
         self.bus = 1  # Current output bus (1-6)
+        self.buffer = None  # buffer for storing device codes
         self.outfile = 'musys.out'
+        self.state = None
+        self.nest = 0  # used for tracking conditional nesting
+
         for i in range(6):
             self.buses.append(Bus(i + 1))
         self.macros = {m.name: m for m in [Macro(m) for m in re.split(r'\s*@\s+|@$', macros) if m]}
-        # break program into blocks
-        self.main_program = self.split_into_blocks(self.main_program)
         # extract any line numbers
         for i, block in enumerate(self.main_program):
             lineno = re.match(r'^([0-9]+)\s(.*)$', block)
@@ -53,14 +140,6 @@ class Compiler():
 
     def __repr__(self):
         return """==MUSYS program==\n%s\n==Lines==\n%s\n==Macros==\n%s""" % (self.main_program, self.lines, '\n'.join([str(v) for m, v in self.macros.items()]))
-
-    def split_into_blocks(self, routine):
-        """Split a string of code into blocks."""
-        re_blocks = re.compile(r'(.+\(.*\))|(.+\[.*\])|([A-Z][^"\s]*)\s|(([0-9]*\s)?[^\s]*".*")|(\\)|(#[^;]+;)')
-        blocks = [t.strip() for t in re_blocks.split(routine) if t and t.strip()]
-        if DEBUG:
-            print("  BLOCKS: %s" % blocks)
-        return blocks
 
     def store_input(self, input_):
         if not input_:
@@ -78,26 +157,10 @@ class Compiler():
                 continue
             self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
 
-    def get_val(self, symbol):
-        if not symbol:
-            return 0
-        try:
-            return int(symbol)
-        except ValueError as e:
-            if re.search(r'[+&<>^_*/-]', symbol):
-                return self.expr_evaluate(symbol)
-            return self.variables.get(symbol, 0)
-
-    def assign(self, var, value):
-        v = self.get_val(value)
-        if DEBUG:
-            print('  ASSIGN "%s" = (%s) TO %s' % (value, v, var))
+    def assign(self, var, expr):
+        v = self.expr_evaluate(expr)
+        dprint('  ASSIGN "%s" = (%s) TO %s' % (expr, v, var))
         self.variables[var] = v
-
-    def goto(self, lineno):
-        if DEBUG:
-            print("  GOTO %s IN %s" % (lineno, self.lines))
-        self.pointer = self.lines[lineno]
 
     def mrand(self, e):
         """
@@ -110,7 +173,27 @@ class Compiler():
         sign = e // abs(e)
         return randint(1, abs(e)) * sign
 
+    def get_val(self, symbol):
+        # TODO: this should not be called by anything other than expr_evaluate()
+        if not symbol:
+            return 0
+        try:
+            return int(symbol)
+        except ValueError as e:
+            if re.search(r'[+&<>^_*/-]', symbol):
+                return self.expr_evaluate(symbol)
+            return self.variables.get(symbol, 0)
+
     def expr_evaluate(self, expression):
+        """
+            Evaluates an expression.
+            An expression is composed of items and operators.
+            1) Decimal constant (-2048 to +2047)
+            2) Variable [A-Z]
+            3) Device code (unclear how this can be part of an expression)
+            4) ← (read input from current paragraph)
+            Effect: updates EXP
+        """
         operators = {
                 '+': lambda e, x: e + x,
                 '-': lambda e, x: e - x,
@@ -125,6 +208,11 @@ class Compiler():
         for p in parts:
             if p in operators.keys():
                 op = operators[p]
+            elif p == '%':
+                value = self.expr_evaluate(expression[2:-1]) - 1
+                dprint('MACRO formal parameter found:', p, expression, value, 'Macro:', self.pointer.obj.name, self.pointer.obj.values, self.pointer.obj.values[value])
+                self.EXP = self.pointer.obj.values[value]
+                break
             elif p in '↑^':
                 self.EXP = self.mrand(self.EXP)
             elif op is None:
@@ -132,67 +220,113 @@ class Compiler():
             else:
                 self.EXP = op(self.EXP, self.get_val(p))
         self.EXP = max_signed(self.EXP)
+        dprint('EXPR:', expression, '=>', self.EXP)
         return self.EXP
 
-    def evaluate(self, routine, increment=True):
+    def str_out(self, s):
+        """Output a string / character if EXP is non-zero."""
+        if self.EXP:
+            print(s, end='')
+
+    def evaluate(self):
         """
         Evaluates routine.
+        "'routine' is used to denote a section of program that may use any MUSYS facilities provided
+        that bracketing characters, (), [], "", '' are nested." (Grogono, 1973. p.373)
         """
-        routine = routine.strip()
-        if increment:
-            self.pointer += 1
-        repeat_match = re.match(r'(.+)\((.)\)', routine)
-        output_match = re.match(r'([^"]+)?("(.*)"|\\)', routine)
-        send_match = re.match(r'([^\s\.:]+)(\.|:)(.*)$', routine)
-        #conditional_match = re.match(r'(.+)\[(.)\]', routine)
-        if '[' in routine:  # conditional
-            expr, subroutine = re.match(r'([^\[]*)\[(.*)\]', routine).groups()
-            if DEBUG:
-                print("  COND %s (%s) => %s" % (expr, self.get_val(expr) > 0, subroutine))
-                #print("  REPEAT MATCH: %s" % repeat_match)
-            if self.get_val(expr) > 0:
-                for s in self.split_into_blocks(subroutine):
-                    if DEBUG:
-                        print(">>>" + s)
-                    self.evaluate(s, False)
-        elif send_match:
-            #print('DEVICE:', send_match.groups())
-            v, w, remainder = send_match.groups()
-            if not RE_DEVICE.match(v):
-                v = self.get_val(v)
-            self.output(v, w)
-            if remainder:
-                self.evaluate(remainder, False)
-        elif repeat_match:
-            expr, routine = repeat_match.groups()
-            for i in range(self.get_val(expr)):
-                self.evaluate(routine)
-        elif output_match:  # STDOUT for monitor and debug
-            val = self.get_val(output_match.group(1))
-            output = output_match.group(2).strip('"')
-            if output == '\\':
-                print(output.replace('\\', str(self.EXP)))
-            elif val > 0:
-                print(output)
-        elif '!' in routine:  # select output bus
-            n = re.search(r'([0-9])!', routine).group(1)
-            self.bus = int(n)
-        elif '=' in routine:  # assignment
-            var, val = re.split(r'(\w)+\s*=\s*', routine)[-2:]
-            self.assign(var, val)
-        elif routine[0] == 'G':  # GOTO
-            lineno = int(re.match('G([0-9]+)', routine).group(1))
-            self.goto(lineno)
-        elif '#' in routine:
-            # TODO: Macro calls can apparently be nested
-            self.evaluate(self.call_macro(routine), False)
-        else:  # simply evaluate the line
-            self.expr_evaluate(routine)
+        l, c, o = self.pointer.l, self.pointer.c, self.pointer.obj
+        if o == self:
+            if l >= len(self.main_program):
+                return False
+            routine = self.main_program[l]
+        else:
+            routine = o.routine
+        routine = routine[c:]
+        symbol = routine[0]
+        mov = 1  # number of symbols to advance after this read
+
+        if self.state == 'FCOND':  # in False condition
+            if symbol == '[':
+                self.nest += 1
+            elif symbol == ']':
+                self.nest -= 1
+            if self.nest == 0:
+                self.state = None
+            return self.pointer.advance()
+
+        if not self.state == 'STRING':  # Strings comment / STDOUT
+            m = RE_EXPR.match(routine)
+            dprint('ROUTINE:', routine)
+            dprint(self.pointer)
+
+        if self.state == 'STRING':
+            if symbol == '"':
+                self.state = None
+                self.str_out('\n')
+            else:
+                self.str_out(symbol)
+        elif symbol == '"':
+            self.state = 'STRING'
+        elif symbol == '\\':  # print EXP to STDOUT
+            print(self.EXP)
+        elif symbol == '[':  # Conditional block
+            m = re.match(r'([^\[]*)\[(.*)\]', routine)
+            expr, subroutine = m.group(1, 2)
+            cond = self.expr_evaluate(expr) > 0
+            dprint("  COND %s (%s) => %s -- %s" % (expr, cond, subroutine, m.group(0)))
+            if not cond:
+                self.state = 'FCOND'
+                self.nest += 1
+        elif symbol == '(':  # Repeat block
+            dprint('REPEAT FOUND!', routine, self.pointer)
+            self.pointer.push(self.pointer.obj, self.EXP)
+        elif symbol == ')':  # End of repeat block
+            dprint('END REPEAT FOUND!', routine, self.pointer)
+            self.pointer.decr_repeat()
+        elif symbol == '#':  # Macro
+            dprint('MACRO FOUND!', len(routine))
+            macro = self.call_macro(routine)
+            self.pointer.push(macro)
+            return macro
+        #elif symbol in '] ':
+        #    pass
+        elif RE_GOTO.match(routine):  # GOTO
+            m = RE_GOTO.match(routine)
+            dprint('GOTO', m.group(1))
+            return self.pointer.goto(int(m.group(1)))
+        elif RE_DEVICE.match(routine):  # device found
+            device = RE_DEVICE.match(routine).group(0)
+            self.buffer = device
+            dprint('DEVICE', device)
+            return self.pointer.advance(len(device))
+        elif symbol in '.:!':  # Send output to a list
+            widths = {'.': 6, ':': 12}
+            output = self.buffer if self.buffer is not None else self.EXP
+            if symbol == '!':
+                self.bus = output
+            else:
+                self.output(output, widths[symbol])
+                self.buffer = None
+        elif RE_ASSIGN.match(routine):  # Assignment
+            m = RE_ASSIGN.match(routine)
+            var, expr = m.group(1, 2)
+            self.assign(var, expr)
+            mov = len(m.group(0))
+            dprint('MOV', mov)
+        elif m:
+            dprint('FOUND:', m.group())
+            expr = m.group()
+            self.expr_evaluate(expr)
+            mov = len(expr)
+
+        return self.pointer.advance(mov)
+
 
     def call_macro(self, routine):
-        re_macro = re.compile(r'#([A-Z]+)\s+(.*);')
-        name, parameters = re_macro.match(routine).groups()
+        m = RE_MACRO.match(routine)
+        name, parameters = m.group(1, 2)
         values = [self.expr_evaluate(p) for p in parameters.split(',')]
+        self.pointer.advance(len(m.group(0)))
         return self.macros[name].call(values)
 
     def output(self, value, width):
@@ -217,22 +351,25 @@ class Compiler():
 
     def run(self):
         """ Run the program!"""
-        while self.pointer < len(self.main_program):
-            self.evaluate(self.main_program[self.pointer])
+        while self.evaluate():
+            pass
 
 
 class Macro():
     def __init__(self, raw):
         data = [t.strip() for t in re.split('(^[A-Z]{2,6})', raw.strip()) if t]
         self.name, self.body = data
+        self.values = []
         assert len(self.name) < 7
 
     def call(self, args):
         result = self.body
         for i, a in enumerate(args):
-            result = result.replace('%' + chr(65 + i), str(a))
-        print('Called %s with %s. RESULT = %s' % (self.name, args, result))
-        return result
+            result = result.replace('%' + ALPHA[i], str(a))
+        dprint('Called %s with %s. RESULT = %s' % (self.name, args, result))
+        self.values = args
+        self.routine = result
+        return self
 
     def __repr__(self):
         return "Macro <%s>: %s" % (self.name, self.body)
@@ -246,7 +383,6 @@ class Bus():
 
     def send(self, n):
         """n is 2 or 4 digit octal string"""
-        #print('DEBUG BUS', n)
         if self.buffer:
             self.data.append(self.buffer + n)
             self.buffer = ''
@@ -274,8 +410,7 @@ if __name__ == '__main__':
     with open(source, 'r') as f:
         musys = Compiler(f.read(), input_)
 
-    if DEBUG:
-        print(musys)
+    dprint(musys)
     musys.run()
     print(musys.buses[0].data)
     musys.write()

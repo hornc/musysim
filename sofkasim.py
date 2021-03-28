@@ -71,7 +71,7 @@ class Sofka:
 
     def secs(self, n):
         """ Number of seconds of time with current clock."""
-        return n * 1/self.clock
+        return n * 1 / self.clock
 
 
 class Envelope:
@@ -95,8 +95,8 @@ class Envelope:
         on = self.durations[1] - attack
         decay = min(self.durations[2], self.durations[3])
         L3 = L1 * (1 - (decay / self.durations[2]))
-        dur = attack + on + decay
-        return "(env {t1} {t2} 0 {L1} {L1} {L3} {dur})".format(t1=attack, t2=on, L1=L1, L3=L3, dur=dur)
+        dur = round(attack + on + decay, 3)
+        return "(env {t1} {t2} 0.01 {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), dur=dur)
 
 
 class Oscillator:
@@ -114,7 +114,7 @@ class Oscillator:
 
     def out(self, history=True):
         if not history:
-            return "(osc %s %s)" % (self.pitch, self.duration)
+            return "(osc %s %s)" % (self.pitch, round(self.duration, 3))
         self.change(0)
         return self.history
 

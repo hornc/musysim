@@ -96,7 +96,11 @@ class Envelope:
         decay = min(self.durations[2], self.durations[3])
         L3 = L1 * (1 - (decay / self.durations[2]))
         dur = round(attack + on + decay, 3)
-        return "(env {t1} {t2} 0.01 {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), dur=dur)
+        final = 0.01  # would like this to be 0.0005, but can still hear clicks
+                      # even at 0.01 the end distortion / sync issue creeps in after some time
+                      # TODO: (mult) group every sound withs its envelope and play the combination in (seq)
+        return "(pwl {t1} {L1} {t2} {L1} {t3} {L3} {t4} 0 {dur})".format(t1=round(attack, 3), t2=round(attack + on, 3), t3=dur - 2 * final, t4=dur - final, L1=round(L1, 3), L3=round(L3, 3), dur=dur)
+        #return "(env {t1} {t2} {final} {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), final=final, dur=dur)
 
 
 class Oscillator:

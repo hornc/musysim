@@ -13,6 +13,7 @@ Nyquist code.
 
 """
 DEBUG = False
+PRELUDE = "(set-control-srate *sound-srate*)"
 
 def dprint(*s):
     if DEBUG:
@@ -130,5 +131,5 @@ if __name__ == '__main__':
     with open(listfile, 'r') as f:
         s = Sofka(f.read())
 
-    print('(play %s)' % s.perform())
+    print(f'{PRELUDE}(play {s.perform()})')
 

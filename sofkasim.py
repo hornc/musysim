@@ -66,7 +66,13 @@ class Sofka:
         sources = [o for o in self.oscillators if o]
         sources += [e for e in self.envelopes if e]
         dprint('SOURCES', sources)
-        output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
+        oscs = sources[0].out()
+        envs = sources[1].out()
+        assert len(oscs) == len(envs)
+        output = ''
+        for i, osc in enumerate(oscs):
+            output += f'(mult {osc} {envs[i]}) '
+        return f'(seq {output})'
         return '(mult %s)' % output
 
     def secs(self, n):

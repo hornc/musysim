@@ -95,8 +95,10 @@ class Envelope:
         L1 = min(1, self.durations[1] / self.durations[0])
         on = self.durations[1] - attack
         decay = min(self.durations[2], self.durations[3])
-        L3 = L1 * (1 - (decay / self.durations[2]))
+        L3 = L1 * (1 - (decay / self.durations[2])) if decay else 1
         dur = round(attack + on + decay, 3)
+        if not decay:
+            on -= 0.02
         return "(env {t1} {t2} 0.01 {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), dur=dur)
 
 

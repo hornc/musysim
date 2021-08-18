@@ -27,6 +27,7 @@ class Sofka:
                           # default implied by example at http://users.encs.concordia.ca/~grogono/Bio/ems.html
         self.oscillators = [None] * 3
         self.envelopes = [None] * 3
+        self.current_time = 0
 
     def perform(self):
         # TODO this needs to be refactored once a sensible system
@@ -52,17 +53,16 @@ class Sofka:
                 if 23 < n < 27:  # Envelopes
                     n = n - 24
                     dprint('Envelope', n + 1)
-                    d = self.secs(v)
+                    d = (self.current_time, self.secs(v))
                     if self.envelopes[n]:
                         self.envelopes[n].addtime(d)
                     else:
                         self.envelopes[n] = Envelope(d)
                 if n == 60:  # Wait timer
-                    d = self.secs(v) 
+                    d = self.secs(v)
                     dprint('WAIT:', d)
+                    self.current_time += d
                     self.oscillators[self.active].duration += d
-                    if self.envelopes[self.active]:
-                        self.envelopes[self.active].addtime(d)
         # write the generated audio
         sources = [o for o in self.oscillators if o]
         sources += [e for e in self.envelopes if e]
@@ -77,29 +77,26 @@ class Sofka:
 
 class Envelope:
     def __init__(self, duration):
-        self.durations = []  # Attack, On, Decay, Off
+        self.durations = []  # list of (time, duration) for alternating attack / decay
         self.addtime(duration)
         self.history = []
 
     def addtime(self, d):
-        if len(self.durations) == 4:
-            self.history.append(self.out(False))
-            self.durations = []
         self.durations.append(d)
 
-    def out(self, history=True):
-        if history:
-            self.addtime(0)
-            return self.history
-        attack = min(self.durations[0], self.durations[1])
-        L1 = min(1, self.durations[1] / self.durations[0])
-        on = self.durations[1] - attack
-        decay = min(self.durations[2], self.durations[3])
-        L3 = L1 * (1 - (decay / self.durations[2])) if decay else 1
-        dur = round(attack + on + decay, 3)
-        if not decay:
-            on -= 0.02
-        return "(env {t1} {t2} 0.01 {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), dur=dur)
+    def out(self):
+        phase = 1  # 1: attack, 0: decay
+        breakpoints = []
+        for duration in self.durations:
+            breakpoints += [duration[0], 1 - phase, sum(duration), phase]
+            phase = 1 - phase
+        if breakpoints[:2] == [0, 0]:
+            breakpoints = breakpoints[2:]
+        if breakpoints[-1] == 0:
+            breakpoints = breakpoints[:-1]
+        assert len(breakpoints) & 1 == 1
+        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints])
+        return [f"(pwl-list (list {breakpoints}))"]
 
 
 class Oscillator:

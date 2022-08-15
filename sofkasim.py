@@ -88,23 +88,18 @@ class Envelope:
         self.durations.append(d)
 
     def out(self):
-        phase = 1  # 1: attack, 0: decay
+        stage = 1  # 1: attack, 0: decay
         breakpoints = []
         for duration in self.durations:
             t_prev = breakpoints[-2] if breakpoints else 0
-            level = 1 - phase
+            level = 1 - stage
             if duration[0] < t_prev:
                 breakpoints[-2] = duration[0]
                 breakpoints[-1] = min(level, 0.5)
             else:
                 breakpoints += [duration[0], level]
-            breakpoints += [sum(duration), phase]
-            phase = 1 - phase
-        #if breakpoints[:2] == [0, 0]:
-        #    breakpoints = breakpoints[2:]
-        #if breakpoints[-1] == 0:
-        #    breakpoints = breakpoints[:-1]
-        #assert len(breakpoints) & 1 == 1  # length must be odd
+            breakpoints += [sum(duration), stage]
+            stage = 1 - stage
         breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints[:25]])
         return [f"(pwl-list (list {breakpoints}))"]
 

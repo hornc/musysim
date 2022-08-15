@@ -82,20 +82,30 @@ class Envelope:
         self.history = []
 
     def addtime(self, d):
+        """
+        d tuple: (time, duration) in seconds
+        """
         self.durations.append(d)
 
     def out(self):
         phase = 1  # 1: attack, 0: decay
         breakpoints = []
         for duration in self.durations:
-            breakpoints += [duration[0], 1 - phase, sum(duration), phase]
+            t_prev = breakpoints[-2] if breakpoints else 0
+            level = 1 - phase
+            if duration[0] < t_prev:
+                breakpoints[-2] = duration[0]
+                breakpoints[-1] = min(level, 0.5)
+            else:
+                breakpoints += [duration[0], level]
+            breakpoints += [sum(duration), phase]
             phase = 1 - phase
-        if breakpoints[:2] == [0, 0]:
-            breakpoints = breakpoints[2:]
-        if breakpoints[-1] == 0:
-            breakpoints = breakpoints[:-1]
-        assert len(breakpoints) & 1 == 1
-        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints])
+        #if breakpoints[:2] == [0, 0]:
+        #    breakpoints = breakpoints[2:]
+        #if breakpoints[-1] == 0:
+        #    breakpoints = breakpoints[:-1]
+        #assert len(breakpoints) & 1 == 1  # length must be odd
+        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints[:25]])
         return [f"(pwl-list (list {breakpoints}))"]
 
 

@@ -2,6 +2,7 @@
 import argparse
 from devices import get_device
 
+
 """
 Sofka simulator for MUSYS.
 
@@ -12,8 +13,11 @@ hardware audio devices by generating
 Nyquist code.
 
 """
+
+
 DEBUG = False
-PRELUDE = "(set-control-srate *sound-srate*)"
+MAX_INTERRUPT_FREQ = 16000
+PRELUDE = f"(set-control-srate {MAX_INTERRUPT_FREQ})"
 
 
 def dprint(*s):
@@ -77,7 +81,7 @@ class Sofka:
         sources += [e for e in self.envelopes if e]
         dprint('SOURCES', sources)
         output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
-        return '(mult %s)' % output
+        return f'(mult {output})'
 
     def secs(self, n):
         """ Number of seconds of time with current clock."""

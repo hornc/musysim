@@ -54,11 +54,14 @@ class Sofka:
                 if 23 < n < 27:  # Envelopes
                     n = n - 24
                     dprint('Envelope', n + 1)
-                    d = (self.current_time, self.secs(v))
+                    t = self.current_time
+                    d = self.secs(v)
                     if self.envelopes[n]:
-                        self.envelopes[n].addtime(d)
+                        self.envelopes[n].addtime(t, d)
                     else:
-                        self.envelopes[n] = Envelope(d)
+                        self.envelopes[n] = Envelope(t, d)
+                    self.current_time += d
+                    self.oscillators[self.active].duration += d
                 if n == 60:  # Wait timer
                     d = self.secs(v)
                     dprint('WAIT:', d)
@@ -77,16 +80,17 @@ class Sofka:
 
 
 class Envelope:
-    def __init__(self, duration):
+    def __init__(self, current_time, duration):
         self.durations = []  # list of (time, duration) for alternating attack / decay
-        self.addtime(duration)
+        self.addtime(current_time, duration)
         self.history = []
 
-    def addtime(self, d):
+    def addtime(self, t, d):
         """
-        d tuple: (time, duration) in seconds
+        t float: current time (seconds)
+        d float: duration (seconds)
         """
-        self.durations.append(d)
+        self.durations.append((t, d))
 
     def out(self):
         stage = 1  # 1: attack, 0: decay

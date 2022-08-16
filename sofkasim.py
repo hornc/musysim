@@ -14,6 +14,7 @@ Nyquist code.
 """
 DEBUG = False
 PRELUDE = "(set-control-srate *sound-srate*)"
+NY_CALL_ARGUMENTS_LIMIT = 1943
 
 def dprint(*s):
     if DEBUG:
@@ -100,7 +101,7 @@ class Envelope:
                 breakpoints += [duration[0], level]
             breakpoints += [sum(duration), stage]
             stage = 1 - stage
-        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints[:25]])
+        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints[:NY_CALL_ARGUMENTS_LIMIT]])
         return [f"(pwl-list (list {breakpoints}))"]
 
 

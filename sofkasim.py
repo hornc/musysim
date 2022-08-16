@@ -57,17 +57,17 @@ class Sofka:
                     t = self.current_time
                     d = self.secs(v)
                     if self.envelopes[n]:
-                        self.envelopes[n].addtime(t, d)
+                        self.envelopes[n].addstage(t, d)
                     else:
                         self.envelopes[n] = Envelope(t, d)
                     self.current_time += d
-                    self.oscillators[self.active].duration += d
+                    self.oscillators[self.active].addtime(d)
                 if n == 60:  # Wait timer
                     d = self.secs(v)
                     dprint('WAIT:', d)
                     self.current_time += d
-                    self.oscillators[self.active].duration += d
-        # write the generated audio
+                    self.oscillators[self.active].addtime(d)
+        # Write the generated audio
         sources = [o for o in self.oscillators if o]
         sources += [e for e in self.envelopes if e]
         dprint('SOURCES', sources)
@@ -81,30 +81,30 @@ class Sofka:
 
 class Envelope:
     def __init__(self, current_time, duration):
-        self.durations = []  # list of (time, duration) for alternating attack / decay
-        self.addtime(current_time, duration)
+        self.stages = []  # list of (time, duration) for alternating attack / decay
+        self.addstage(current_time, duration)
         self.history = []
 
-    def addtime(self, t, d):
+    def addstage(self, t, d):
         """
         t float: current time (seconds)
         d float: duration (seconds)
         """
-        self.durations.append((t, d))
+        self.stages.append((t, d))
 
     def out(self):
-        stage = 1  # 1: attack, 0: decay
+        level = 0  # 0: attack, 1: decay
         breakpoints = []
-        for duration in self.durations:
+        for stage in self.stages:
             t_prev = breakpoints[-2] if breakpoints else 0
-            level = 1 - stage
-            if duration[0] < t_prev:
-                breakpoints[-2] = duration[0]
+
+            if stage[0] < t_prev:
+                breakpoints[-2] = stage[0]
                 breakpoints[-1] = min(level, 0.5)
             else:
-                breakpoints += [duration[0], level]
-            breakpoints += [sum(duration), stage]
-            stage = 1 - stage
+                breakpoints += [stage[0], level]
+            level = 1 - level
+            breakpoints += [sum(stage), level]
         breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints])
         return [f"(pwl-list '({breakpoints}))"]
 
@@ -115,7 +115,11 @@ class Oscillator:
         # Middle C = Nyquist 60, MUSYS 32
         self.pitch = pitch + 28
         self.duration = 0
+        self.phase = 0
         self.history = []
+
+    def addtime(self, d):
+        self.duration += d
 
     def change(self, pitch):
         self.history.append(self.out(False))
@@ -124,7 +128,7 @@ class Oscillator:
 
     def out(self, history=True):
         if not history:
-            return "(osc %s %s)" % (self.pitch, round(self.duration, 3))
+            return f"(osc {self.pitch} {round(self.duration, 3)} *table* {self.phase})"
         self.change(0)
         return self.history
 

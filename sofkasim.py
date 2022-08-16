@@ -21,6 +21,11 @@ def dprint(*s):
         print(*s)
 
 
+def freq(pitch):
+    """Converts a Nyquist pitch number to Hz."""
+    return 440 * 2 ** ((pitch - 69) / 12)
+
+
 class Sofka:
     def __init__(self, lists):
         self.lists = [b.split(' ') for b in lists.split('\n')]
@@ -122,13 +127,14 @@ class Oscillator:
         self.duration += d
 
     def change(self, pitch):
-        self.history.append(self.out(False))
+        self.history.append(
+            f"(osc {self.pitch} {round(self.duration, 3)} *table* {round(self.phase, 3)})"
+        )
+        self.phase = (self.phase + self.duration * freq(self.pitch)) % 360
         self.pitch = pitch + 28
         self.duration = 0
 
-    def out(self, history=True):
-        if not history:
-            return f"(osc {self.pitch} {round(self.duration, 3)} *table* {self.phase})"
+    def out(self):
         self.change(0)
         return self.history
 

@@ -2,6 +2,7 @@
 import argparse
 from devices import get_device
 
+
 """
 Sofka simulator for MUSYS.
 
@@ -12,11 +13,21 @@ hardware audio devices by generating
 Nyquist code.
 
 """
+
+
 DEBUG = False
+MAX_INTERRUPT_FREQ = 16000
+PRELUDE = f"(set-control-srate {MAX_INTERRUPT_FREQ})"
+
 
 def dprint(*s):
     if DEBUG:
         print(*s)
+
+
+def freq(pitch):
+    """Converts a Nyquist pitch number to Hz."""
+    return 440 * 2 ** ((pitch - 69) / 12)
 
 
 class Sofka:
@@ -26,6 +37,7 @@ class Sofka:
                           # default implied by example at http://users.encs.concordia.ca/~grogono/Bio/ems.html
         self.oscillators = [None] * 3
         self.envelopes = [None] * 3
+        self.current_time = 0
 
     def perform(self):
         # TODO this needs to be refactored once a sensible system
@@ -51,23 +63,25 @@ class Sofka:
                 if 23 < n < 27:  # Envelopes
                     n = n - 24
                     dprint('Envelope', n + 1)
+                    t = self.current_time
                     d = self.secs(v)
                     if self.envelopes[n]:
-                        self.envelopes[n].addtime(d)
+                        self.envelopes[n].addstage(t, d)
                     else:
-                        self.envelopes[n] = Envelope(d)
+                        self.envelopes[n] = Envelope(t, d)
+                    self.current_time += d
+                    self.oscillators[self.active].addtime(d)
                 if n == 60:  # Wait timer
-                    d = self.secs(v) 
+                    d = self.secs(v)
                     dprint('WAIT:', d)
-                    self.oscillators[self.active].duration += d
-                    if self.envelopes[self.active]:
-                        self.envelopes[self.active].addtime(d)
-        # write the generated audio
+                    self.current_time += d
+                    self.oscillators[self.active].addtime(d)
+        # Write the generated audio
         sources = [o for o in self.oscillators if o]
         sources += [e for e in self.envelopes if e]
         dprint('SOURCES', sources)
         output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
-        return '(mult %s)' % output
+        return f'(mult {output})'
 
     def secs(self, n):
         """ Number of seconds of time with current clock."""
@@ -75,28 +89,33 @@ class Sofka:
 
 
 class Envelope:
-    def __init__(self, duration):
-        self.durations = []  # Attack, On, Decay, Off
-        self.addtime(duration)
+    def __init__(self, current_time, duration):
+        self.stages = []  # list of (time, duration) for alternating attack / decay
+        self.addstage(current_time, duration)
         self.history = []
 
-    def addtime(self, d):
-        if len(self.durations) == 4:
-            self.history.append(self.out(False))
-            self.durations = []
-        self.durations.append(d)
+    def addstage(self, t, d):
+        """
+        t float: current time (seconds)
+        d float: duration (seconds)
+        """
+        self.stages.append((t, d))
 
-    def out(self, history=True):
-        if history:
-            self.addtime(0)
-            return self.history
-        attack = min(self.durations[0], self.durations[1])
-        L1 = min(1, self.durations[1] / self.durations[0])
-        on = self.durations[1] - attack
-        decay = min(self.durations[2], self.durations[3])
-        L3 = L1 * (1 - (decay / self.durations[2]))
-        dur = round(attack + on + decay, 3)
-        return "(env {t1} {t2} 0.01 {L1} {L1} {L3} {dur})".format(t1=round(attack, 3), t2=round(on, 3), L1=round(L1, 3), L3=round(L3, 3), dur=dur)
+    def out(self):
+        level = 0  # 0: attack, 1: decay
+        breakpoints = []
+        for stage in self.stages:
+            t_prev = breakpoints[-2] if breakpoints else 0
+
+            if stage[0] < t_prev:
+                breakpoints[-2] = stage[0]
+                breakpoints[-1] = min(level, 0.5)
+            else:
+                breakpoints += [stage[0], level]
+            level = 1 - level
+            breakpoints += [sum(stage), level]
+        breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints])
+        return [f"(pwl-list '({breakpoints}))"]
 
 
 class Oscillator:
@@ -105,16 +124,21 @@ class Oscillator:
         # Middle C = Nyquist 60, MUSYS 32
         self.pitch = pitch + 28
         self.duration = 0
+        self.phase = 0
         self.history = []
 
+    def addtime(self, d):
+        self.duration += d
+
     def change(self, pitch):
-        self.history.append(self.out(False))
+        self.history.append(
+            f"(osc {self.pitch} {round(self.duration, 3)} *table* {round(self.phase, 3)})"
+        )
+        self.phase = (self.phase + self.duration * freq(self.pitch)) % 360
         self.pitch = pitch + 28
         self.duration = 0
 
-    def out(self, history=True):
-        if not history:
-            return "(osc %s %s)" % (self.pitch, round(self.duration, 3))
+    def out(self):
         self.change(0)
         return self.history
 
@@ -130,5 +154,5 @@ if __name__ == '__main__':
     with open(listfile, 'r') as f:
         s = Sofka(f.read())
 
-    print('(play %s)' % s.perform())
+    print(f'{PRELUDE}(play {s.perform()})')
 

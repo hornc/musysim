@@ -32,7 +32,7 @@ def test_max_value():
 
 def test_strict_left_right_eval():
     code = "10-5*4 $"
-    # This is _supposed_ to be 20.
+    # This is **supposed** to be 20.
     # i.e. (10-5)*4
     m = Compiler(code)
     m.run()
@@ -48,3 +48,18 @@ def test_max_signed():
     #assert max_signed(-2048 - 5) == 4
     #assert max_signed(0xfff + 5) == 4
 
+
+@pytest.mark.xfail(raises=IndexError, reason='Macros not yet evaluated to parse @ as an early return.', strict=True)
+def test_factorial_recursive_macro():
+    """
+    Factorial example taken from
+    MUSYS: SOFTWARE FOR AN ELECTRONIC MUSIC STUDIO, BY PETER GROGONO, 1973. P.375
+    """
+    code = r"""
+        #FAC 4; \
+        $
+        FAC %A-1[#FAC %A-1; N=%A*N @] N=1 @
+    """
+    m = Compiler(code)
+    m.run()
+    assert m.EXP == 24

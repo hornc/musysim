@@ -7,39 +7,65 @@ full_devices = {
     'O1': {
         'number': 1,
         'group': 'Oscillators',
-        'description': 'Oscillator',
-        'information_source': '',
+        'description': 'Oscillator 1',
+        'information_source': 'inferred from O2',
+        'arguments': {
+            'pitch': {
+                'bits': 6
+            }
+        }
     },
     'O2': {
         'number': 2,
         'group': 'Oscillators',
-        'description': 'Oscillator',
-        'information_source': 'Grogono, 1973',
+        'description': 'Oscillator 2',
+        'information_source': 'Grogono, 1973, p.377',
+        'arguments': {
+            'pitch': {
+                'bits': 6
+            }
+        }
     },
     'O3': {
         'number': 2,
         'group': 'Oscillators',
-        'description': 'Oscillator',
-        'information_source': '',
+        'description': 'Oscillator 3',
+        'information_source': 'inferred from O2',
+        'arguments': {
+            'pitch': {
+                'bits': 6
+            }
+        }
     },
-
+    'K1': {
+        'number': 8,
+        'group': 'Oscillators',
+        'description': 'Frequency Oscillator 1',
+        'information_source': 'Grogono, 1973, p.378',
+        'arguments': {
+            'frequency': {
+                'units': 'Hz',
+                'bits': 12
+            }
+        }
+    },
     'L1': {
         'number': 12,
         'group': 'Amplifiers',
         'description': 'Loudness amplifier 1',
-        'information_source': '',
+        'information_source': 'inferred from L2',
     },
     'L2': {
         'number': 13,
         'group': 'Amplifiers',
         'description': 'Loudness amplifier 2',
-        'information_source': 'Grogono, 1973',
+        'information_source': 'Grogono, 1973, p.377',
     },
     'L3': {
         'number': 14,
         'group': 'Amplifiers',
         'description': 'Loudness amplifier 3',
-        'information_source': '',
+        'information_source': 'inferred from L2',
     },
     'A1': {
         'number': 12,
@@ -75,7 +101,7 @@ full_devices = {
         'number': 60,
         'group': 'Timers',
         'description': 'Timer 1: Wait timer',
-        'information_source': 'Grogono, 1973',
+        'information_source': 'Grogono, 1973, p.377',
         'arguments': {
             'wait': { 
                 'units': 'interrupts',
@@ -87,13 +113,13 @@ full_devices = {
         'number': 61,
         'group': 'Timers',
         'description': 'Timer 2',
-        'information_source': '',
+        'information_source': 'inferred from T1 and T3',
     },
     'T3': {
         'number': 62,
         'group': 'Timers',
         'description': 'Timer 3: HW clock interrupt, 0.25Hz – 16KHz',
-        'information_source': 'Grogono, 1973',
+        'information_source': 'Grogono, 1973, p.377',
         'arguments': {
             'rate': {
                 'units': 'interrupts / second',

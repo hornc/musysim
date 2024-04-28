@@ -340,7 +340,7 @@ class Compiler():
             v = devices[value]
         else:
             v = value
-        v = oct(int(v))[-2:].replace('o', '0')
+        v = oct(int(v))[-width//3:].replace('o', '0')
         self.buses[self.bus - 1].send(v)
 
     def write(self):

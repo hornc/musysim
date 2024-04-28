@@ -62,3 +62,14 @@ def test_factorial_recursive_macro():
     m = Compiler(code)
     m.run()
     assert m.EXP == 24
+
+
+def test_12bit_output():
+    """
+    12bit variable oscillator output test example from
+    Grogono, 1973. p.377.
+    """
+    code = r"O.K1. 1000:$"
+    m = Compiler(code)
+    m.run()
+    assert m.buses[0].data == ['0010', '1750']

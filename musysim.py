@@ -5,6 +5,7 @@ https://esolangs.org/wiki/MUSYS simulator
 
 import argparse
 import re
+from copy import copy
 from random import randint
 
 from devices import devices
@@ -20,7 +21,7 @@ ITEM = f'({CONST}|{VAR}|←)'
 OP = r'[-+&<>/*]'
 EXPR = f'{ITEM}([↑^]|{OP}{ITEM})*'
 RE_EXPR = re.compile(EXPR)
-RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')
+RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')  # Should this accept whitespace around = ?
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 RE_GOTO = re.compile(r'G([0-9]+)')
 RE_MACRO = re.compile(r'#([A-Z]+)\s+(.*);')
@@ -41,8 +42,8 @@ def max_signed(i):
 
 class Pointer():
     def __init__(self, obj):
-        self.l = 0
-        self.c = 0
+        self.l = 0  # line
+        self.c = 0  # character
         self.counter = 1
         self.obj = obj
         self.stack = []
@@ -93,7 +94,7 @@ class Pointer():
         self.obj.routine = ''
         loc = self.stack.pop()
         self.l, self.c, self.obj, self.counter = loc
-        dprint('NEW LOCATION:', str(loc)[:5])
+        dprint('POINTER LOC:', loc)
         return self.obj
 
     def push(self, obj, counter=0):
@@ -105,7 +106,7 @@ class Pointer():
         self.counter = counter
 
     def __repr__(self):
-        return f'<Pointer> ({self.l}, {self.c}) Counter: {self.counter} {str(self.obj)[:5]}'
+        return f'<Pointer> ({self.l}, {self.c}) Counter: {self.counter} ({str(self.obj)[:5]}) Stack size: {len(self.stack)}'
 
 
 class Compiler():
@@ -256,7 +257,7 @@ class Compiler():
 
         if not self.state == 'STRING':  # Strings comment / STDOUT
             m = RE_EXPR.match(routine)
-            dprint('ROUTINE:', routine)
+            dprint(f'ROUTINE: {routine} SYMBOL: <{symbol}>')
             dprint(self.pointer)
 
         if self.state == 'STRING':
@@ -273,7 +274,8 @@ class Compiler():
             m = re.match(r'([^\[]*)\[(.*)\]', routine)
             expr, subroutine = m.group(1, 2)
             cond = self.expr_evaluate(expr) > 0
-            dprint("  COND %s (%s) => %s -- %s" % (expr, cond, subroutine, m.group(0)))
+            dprint(f"  COND {expr} ({cond}) => {subroutine}")
+
             if not cond:
                 self.state = 'FCOND'
                 self.nest += 1
@@ -284,12 +286,14 @@ class Compiler():
             dprint('END REPEAT FOUND!', routine, self.pointer)
             self.pointer.decr_repeat()
         elif symbol == '#':  # Macro
-            dprint('MACRO FOUND!', len(routine))
             macro = self.call_macro(routine)
+            dprint(f'MACRO FOUND! {routine} => {macro.routine}')
             self.pointer.push(macro)
             return macro
         #elif symbol in '] ':
         #    pass
+        elif symbol == '@':  # Early return from macro
+            self.pointer.pop()
         elif RE_GOTO.match(routine):  # GOTO
             m = RE_GOTO.match(routine)
             dprint('GOTO', m.group(1))
@@ -314,8 +318,8 @@ class Compiler():
             mov = len(m.group(0))
             dprint('MOV', mov)
         elif m:
-            dprint('FOUND:', m.group())
             expr = m.group()
+            dprint(f'EXPR FOUND: {expr}')
             self.expr_evaluate(expr)
             mov = len(expr)
 
@@ -327,7 +331,8 @@ class Compiler():
         name, parameters = m.group(1, 2)
         values = [self.expr_evaluate(p) for p in parameters.split(',')]
         self.pointer.advance(len(m.group(0)))
-        return self.macros[name].call(values)
+        macro = copy(self.macros[name])
+        return macro.call(values)
 
     def output(self, value, width):
         """Send an output to current bus."""
@@ -343,7 +348,7 @@ class Compiler():
         Writes all buses / lists to file.
         """
         #TODO: allow a range of data formats
-        print('[Writing all data lists to %s...]' % self.outfile)
+        print(f'[Writing all data lists to {self.outfile}...]')
         with open(self.outfile, 'w') as f:
             for b in self.buses:
                 f.write(' '.join(b.data))
@@ -366,13 +371,13 @@ class Macro():
         result = self.body
         for i, a in enumerate(args):
             result = result.replace('%' + ALPHA[i], str(a))
-        dprint('Called %s with %s. RESULT = %s' % (self.name, args, result))
+        dprint(f'Called {self.name} with {args}. RESULT = {result}')
         self.values = args
         self.routine = result
         return self
 
     def __repr__(self):
-        return "Macro <%s>: %s" % (self.name, self.body)
+        return f'Macro <{self.name}>: {self.body}'
 
 
 class Bus():

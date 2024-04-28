@@ -49,7 +49,6 @@ def test_max_signed():
     #assert max_signed(0xfff + 5) == 4
 
 
-@pytest.mark.xfail(raises=IndexError, reason='Macros not yet evaluated to parse @ as an early return.', strict=True)
 def test_factorial_recursive_macro():
     """
     Factorial example taken from

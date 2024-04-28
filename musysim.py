@@ -25,6 +25,7 @@ RE_ASSIGN = re.compile(f'([A-Z])=({EXPR})')  # Should this accept whitespace aro
 RE_DEVICE = re.compile(r'[A-Z][0-9]+')
 RE_GOTO = re.compile(r'G([0-9]+)')
 RE_MACRO = re.compile(r'#([A-Z]+)\s+(.*);')
+RE_PARAGRAPH_SELECT = re.compile(f'←[{ALPHA}]')
 
 
 def dprint(*s):
@@ -142,9 +143,10 @@ class Compiler():
     def __repr__(self):
         return """==MUSYS program==\n%s\n==Lines==\n%s\n==Macros==\n%s""" % (self.main_program, self.lines, '\n'.join([str(v) for m, v in self.macros.items()]))
 
-    def store_input(self, input_):
+    def store_input(self, input_:str):
         if not input_:
             return
+        dprint(f'READING DATAFILE!')
         re_parens = re.compile(r'[\(\)\[\]]')
         re_delims = re.compile(r'[,;\s]+')
         i = 0
@@ -157,6 +159,16 @@ class Compiler():
                 self.paragraphs[ALPHA[i]] = []
                 continue
             self.paragraphs[ALPHA[i]] += [int(v.strip()) for v in re_delims.split(line)]
+        dprint(f'PARAGRAPHS: {self.paragraphs}')
+
+    def read_data(self):
+        """Read the next number from the current datafile paragraph."""
+        # TODO: What happens when we have read all values in a paragraph?
+        # TODO: Unsure whether these should be read destructively, does ←A reset the position in the
+        # paragraph back to 0? Destructive .pop(0) seems the easiest for now.
+        n = self.paragraphs[self.paragraph].pop(0)
+        # TODO: figure out whether this is supposed to be 6bit or 12bit & guard against overflows (assume 12bit for now)
+        return n
 
     def assign(self, var, expr):
         v = self.expr_evaluate(expr)
@@ -216,6 +228,9 @@ class Compiler():
                 break
             elif p in '↑^':
                 self.EXP = self.mrand(self.EXP)
+            elif p == '←':
+                dprint(f"READ VALUE!")
+                self.EXP = self.read_data()
             elif op is None:
                 self.EXP = self.get_val(p)
             else:
@@ -317,6 +332,10 @@ class Compiler():
             self.assign(var, expr)
             mov = len(m.group(0))
             dprint('MOV', mov)
+        elif RE_PARAGRAPH_SELECT.match(routine):  # Select data paragraph
+            self.paragraph = routine[1]
+            dprint(f'SELECTING PARA {self.paragraph}!')
+            mov = 2
         elif m:
             expr = m.group()
             dprint(f'EXPR FOUND: {expr}')

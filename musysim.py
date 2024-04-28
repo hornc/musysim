@@ -417,6 +417,8 @@ if __name__ == '__main__':
 
     dprint(musys)
     musys.run()
-    print(musys.buses[0].data)
+    for i, bus in enumerate(musys.buses):
+        if bus.data:
+            print(f'BUS{i+1}: {bus.data}')
     musys.write()
 

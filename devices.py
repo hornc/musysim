@@ -27,7 +27,7 @@ full_devices = {
         }
     },
     'O3': {
-        'number': 2,
+        'number': 3,
         'group': 'Oscillators',
         'description': 'Oscillator 3',
         'information_source': 'inferred from O2',

@@ -58,7 +58,7 @@ class Sofka:
                 n = int(c[:2], 8)
                 v = int(c[2:], 8)
                 device = get_device(int(c[:2], 8))
-                dprint(device, c)
+                dprint(f'\n{device} {c}')
                 if n == 62:  # Interrupt timer
                     self.clock = v
                 if 0 < n < 4:  # Osc
@@ -108,9 +108,10 @@ class Envelope:
         d int: duration (11bit envelope value)
         """
         stage_ms = decay_ms if (len(self.stages) & 1) else attack_ms
-        self.stages.append((t, stage_ms(d)))
+        self.stages.append((t, stage_ms(d)/1000))
 
     def out(self):
+        dprint('ENV:', self.stages)
         level = 0  # 0: attack, 1: decay
         breakpoints = []
         for stage in self.stages:

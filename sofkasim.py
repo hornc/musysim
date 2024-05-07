@@ -30,11 +30,11 @@ def freq(pitch):
     return 440 * 2 ** ((pitch - 69) / 12)
 
 
-def attack_ms(n, min_=1, max_=1000):
+def attack_ms(n:int, min_=1, max_=1000):
     return n**2 * (max_ - min_)/(63**2) + min_
 
 
-def decay_ms(n, min_=10, max_=10000):
+def decay_ms(n:int, min_=10, max_=10000):
     return n**2 * (max_ - min_)/(63**2) + min_
 
 
@@ -72,13 +72,10 @@ class Sofka:
                     n = n - 24
                     dprint('Envelope', n + 1)
                     t = self.current_time
-                    #d = self.secs(v)
                     if self.envelopes[n]:
                         self.envelopes[n].addstage(t, v)
                     else:
                         self.envelopes[n] = Envelope(t, v)
-                    #self.current_time += d
-                    #self.oscillators[self.active].addtime(d)
                 if n == 60:  # Wait timer
                     d = self.secs(v)
                     dprint('WAIT:', d)
@@ -91,14 +88,14 @@ class Sofka:
         output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
         return f'(mult {output})'
 
-    def secs(self, n):
+    def secs(self, n) -> float:
         """ Number of seconds of time with current clock."""
         return n * 1 / self.clock
 
 
 class Envelope:
     def __init__(self, current_time, duration:int):
-        self.stages = []  # list of (time, duration) for alternating attack / decay
+        self.stages = []  # list of (time, duration in seconds) for alternating attack / decay
         self.addstage(current_time, duration)
         self.history = []
 

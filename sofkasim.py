@@ -27,7 +27,17 @@ def dprint(*s):
 
 def freq(pitch):
     """Converts a Nyquist pitch number to Hz."""
+    if pitch == 0:
+        return 0
     return 440 * 2 ** ((pitch - 69) / 12)
+
+
+def attack_ms(n:int, min_=1, max_=1000):
+    return n**2 * (max_ - min_)/(63**2) + min_
+
+
+def decay_ms(n:int, min_=10, max_=10000):
+    return n**2 * (max_ - min_)/(63**2) + min_
 
 
 class Sofka:
@@ -35,7 +45,7 @@ class Sofka:
         self.lists = [b.split(' ') for b in lists.split('\n')]
         self.clock = 100  # Interrupts per second
                           # default implied by example at http://users.encs.concordia.ca/~grogono/Bio/ems.html
-        self.oscillators = [None] * 3
+        self.oscillators = [Oscillator(0) for i in range(3)]
         self.envelopes = [None] * 3
         self.current_time = 0
 
@@ -50,58 +60,65 @@ class Sofka:
                 n = int(c[:2], 8)
                 v = int(c[2:], 8)
                 device = get_device(int(c[:2], 8))
-                dprint(device, c)
+                dprint(f'\n{device} {c}')
                 if n == 62:  # Interrupt timer
                     self.clock = v
                 if 0 < n < 4:  # Osc
                     dprint('OSC', n)
                     if self.oscillators[n - 1]:
                         self.oscillators[n - 1].change(v)
-                    else:
-                        self.oscillators[n - 1] = Oscillator(v)
-                    self.active = n - 1
                 if 23 < n < 27:  # Envelopes
                     n = n - 24
                     dprint('Envelope', n + 1)
                     t = self.current_time
-                    d = self.secs(v)
                     if self.envelopes[n]:
-                        self.envelopes[n].addstage(t, d)
+                        self.envelopes[n].addstage(t, v)
                     else:
-                        self.envelopes[n] = Envelope(t, d)
-                    self.current_time += d
-                    self.oscillators[self.active].addtime(d)
+                        self.envelopes[n] = Envelope(t, v)
                 if n == 60:  # Wait timer
                     d = self.secs(v)
                     dprint('WAIT:', d)
                     self.current_time += d
-                    self.oscillators[self.active].addtime(d)
-        # Write the generated audio
-        sources = [o for o in self.oscillators if o]
-        sources += [e for e in self.envelopes if e]
-        dprint('SOURCES', sources)
-        output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
-        return f'(mult {output})'
+                    [osc.addtime(d) for osc in self.oscillators if osc]
 
-    def secs(self, n):
+        # Write the generated audio
+        # TODO:
+        # mix oscillators, envelopes, and their amplifiers as patched
+        # mix signals
+        signals = []
+        for i, osc in enumerate(self.oscillators):
+            if osc.pitch == 0 and not osc.history:
+                continue
+            if env := self.envelopes[i]:
+                signals.append(f'(mult {osc.out()} {env.out()})')
+            else:
+                signals.append(osc.out())
+        dprint('SIGNALS', signals)
+        #output = ' '.join(['(seq %s)' % ' '.join(s.out()) for s in sources])
+        output = ' '.join(signals)
+        return f'(sim {output})'
+
+    def secs(self, n) -> float:
         """ Number of seconds of time with current clock."""
         return n * 1 / self.clock
 
 
 class Envelope:
-    def __init__(self, current_time, duration):
-        self.stages = []  # list of (time, duration) for alternating attack / decay
+    def __init__(self, current_time, duration:int):
+        self.stages = []  # list of (time, duration in seconds) for alternating attack / decay
         self.addstage(current_time, duration)
         self.history = []
 
-    def addstage(self, t, d):
+    def addstage(self, t:float, d:int):
         """
         t float: current time (seconds)
-        d float: duration (seconds)
+        d int: duration (11bit envelope value)
         """
-        self.stages.append((t, d))
+        stage_ms = decay_ms if (len(self.stages) & 1) else attack_ms
+        self.stages.append((t, stage_ms(d)/1000))
 
-    def out(self):
+    def out(self) -> str:
+        dprint('ENV:', self.stages)
         level = 0  # 0: attack, 1: decay
         breakpoints = []
         for stage in self.stages:
@@ -115,32 +132,39 @@ class Envelope:
             level = 1 - level
             breakpoints += [sum(stage), level]
         breakpoints = ' '.join([str(round(v, 3)) for v in breakpoints])
-        return [f"(pwl-list '({breakpoints}))"]
+        return f"(pwl-list '({breakpoints}))"
 
 
 class Oscillator:
     def __init__(self, pitch=32):
         # Hypothesised: {Nyquist (MIDI) tone} = {MUSYS tone} + 28
         # Middle C = Nyquist 60, MUSYS 32
-        self.pitch = pitch + 28
+        self.pitch = pitch + 28 if pitch else 0
         self.duration = 0
         self.phase = 0
-        self.history = []
+        self.history = []  # list of nyquist commands to seq
 
     def addtime(self, d):
         self.duration += d
 
     def change(self, pitch):
-        self.history.append(
-            f"(osc {self.pitch} {round(self.duration, 3)} *table* {round(self.phase, 3)})"
-        )
+        if self.pitch == 0 and self.duration:
+            self.history.append(f"(s-rest {round(self.duration, 3)})")
+            self.pitch = pitch + 28 if pitch else 0
+            self.duration = 0
+            return
+        elif self.duration != 0:
+            self.history.append(
+                f"(osc {self.pitch} {round(self.duration, 3)} *table* {round(self.phase, 3)})"
+            )
+        self.pitch = pitch + 28 if pitch else 0
         self.phase = (self.phase + self.duration * freq(self.pitch)) % 360
-        self.pitch = pitch + 28
         self.duration = 0
 
-    def out(self):
+    def out(self) -> str:
         self.change(0)
-        return self.history
+        output = ' '.join(self.history)
+        return f'(seq {output})'
 
 
 if __name__ == '__main__':

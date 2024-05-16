@@ -166,6 +166,8 @@ class Compiler():
         # TODO: What happens when we have read all values in a paragraph?
         # TODO: Unsure whether these should be read destructively, does ←A reset the position in the
         # paragraph back to 0? Destructive .pop(0) seems the easiest for now.
+        if not self.paragraphs:
+            raise Exception(f'Attempting to read data from paragraph {self.paragraph} with no datafile specified! Please provide one using the --input option.')
         n = self.paragraphs[self.paragraph].pop(0)
         # TODO: figure out whether this is supposed to be 6bit or 12bit & guard against overflows (assume 12bit for now)
         return n

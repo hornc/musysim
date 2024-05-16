@@ -87,7 +87,7 @@ class Sofka:
         # mix signals
         signals = []
         for i, osc in enumerate(self.oscillators):
-            if not osc.history:
+            if osc.pitch == 0 and not osc.history:
                 continue
             if env := self.envelopes[i]:
                 signals.append(f'(mult {osc.out()} {env.out()})')
